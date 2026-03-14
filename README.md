@@ -47,6 +47,16 @@ KIMI_API_KEY = "your_kimi_api_key_here"
 
 系统会自动下载并配置yt-dlp，用于视频下载。
 
+### 5. 依赖版本管理
+
+为确保系统稳定性，我们提供了详细的依赖版本记录。如果遇到环境问题，可以使用以下命令安装特定版本的依赖：
+
+```bash
+pip install -r dependencies.txt
+```
+
+`dependencies.txt`文件包含了所有依赖的详细版本信息，确保系统在不同环境中都能正常运行。
+
 ## 使用方法
 
 ### 命令行参数
