@@ -5,16 +5,31 @@ import json
 import os
 
 def chunk_transcript(transcript_path):
-    """Split transcript into chunks for processing"""
+    """Split transcript into chunks for processing with dynamic chunk size"""
     print("Chunking transcript...")
     
     # Load transcript
     full_transcript = load_transcript(transcript_path)
     
-    # Create text splitter
+    # Calculate transcript length
+    transcript_length = len(full_transcript)
+    print(f"Transcript length: {transcript_length} characters")
+    
+    # Dynamic chunk size adjustment based on transcript length
+    # For long transcripts (> 50,000 characters), use larger chunks
+    if transcript_length > 50000:
+        dynamic_chunk_size = 3000
+        dynamic_chunk_overlap = 400
+        print(f"Long transcript detected, using larger chunks: {dynamic_chunk_size} with overlap {dynamic_chunk_overlap}")
+    else:
+        dynamic_chunk_size = CHUNK_SIZE
+        dynamic_chunk_overlap = CHUNK_OVERLAP
+        print(f"Normal transcript, using standard chunks: {dynamic_chunk_size} with overlap {dynamic_chunk_overlap}")
+    
+    # Create text splitter with dynamic settings
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
+        chunk_size=dynamic_chunk_size,
+        chunk_overlap=dynamic_chunk_overlap,
         length_function=len
     )
     
