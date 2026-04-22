@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.venv/
+
+# Backup directories
+backup_*/
+
+# yt-dlp related
+yt-dlp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment variables
+.env
+config.py
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# Large files
+*.exe
+*.zip
+*.tar.gz
+*.7z

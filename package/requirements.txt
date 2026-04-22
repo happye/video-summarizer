@@ -1,0 +1,27 @@
+# 基础依赖
+numpy
+requests
+torch
+torchvision
+torchaudio
+
+# 视频处理
+transformers
+whisperx
+pyannote-audio
+pyannote-database
+pyannote-metrics
+pyannote-pipeline
+
+# 文本处理
+langchain
+nltk
+
+# 工具
+tqdm
+httpx
+fsspec
+
+# 其他
+ctranslate2
+pyav

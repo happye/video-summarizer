@@ -1,0 +1,652 @@
+# Video Summarizer Development Specification
+
+## 1. Project Goal
+
+Build a **locally runnable video summarization system** that is stable, simple to develop, and easily extensible.
+
+### Inputs
+
+* YouTube URL
+* Local video file
+
+### Outputs
+
+* Markdown summary
+* Section summaries
+* Timeline summary
+* Structured outline summary
+
+### Requirements
+
+The system must support:
+
+* Local LLM inference
+* API-based LLM inference
+* Easy model switching
+* Custom summarization strategies
+* Configurable summary depth
+
+Supported models:
+
+Local
+
+* Ollama models
+
+API
+
+* Kimi
+* DeepSeek
+
+The system must prioritize:
+
+* reliability
+* modular design
+* low hallucination risk
+* simple development workflow
+
+---
+
+# 2. System Architecture
+
+The system uses a **simple linear processing pipeline**.
+
+```
+Video
+ ↓
+yt-dlp (download)
+ ↓
+ffmpeg (audio extraction)
+ ↓
+WhisperX (speech-to-text)
+ ↓
+Transcript JSON
+ ↓
+Text Chunker
+ ↓
+LLM Adapter
+ ↓
+Map Summaries
+ ↓
+Reduce Summary
+ ↓
+Markdown Output
+```
+
+### Design Principles
+
+Each stage must be:
+
+* independent
+* replaceable
+* file-based
+
+Intermediate files ensure:
+
+* debugging
+* restart capability
+* reliability
+
+---
+
+# 3. Technology Stack
+
+Core tools:
+
+* yt-dlp
+* ffmpeg
+* WhisperX
+* Python 3.11+
+* Ollama
+
+Optional APIs:
+
+* Kimi API
+* DeepSeek API
+
+### Python dependencies
+
+```
+requests
+whisperx
+langchain-text-splitters
+ollama
+tqdm
+```
+
+Install:
+
+```
+pip install whisperx requests langchain-text-splitters ollama tqdm
+```
+
+---
+
+# 4. Project Structure
+
+```
+video-summarizer/
+
+main.py
+config.py
+
+pipeline/
+    download.py
+    transcribe.py
+    chunker.py
+    summarize.py
+    output.py
+
+llm/
+    adapter.py
+    ollama_client.py
+    kimi_client.py
+    deepseek_client.py
+
+summarizers/
+    map_reduce.py
+    timeline_summary.py
+    outline_summary.py
+
+utils/
+    transcript_loader.py
+```
+
+### Module responsibilities
+
+pipeline
+Data processing pipeline
+
+llm
+Model integration layer
+
+summarizers
+Different summarization strategies
+
+utils
+Helper utilities
+
+---
+
+# 5. Configuration
+
+All configurable settings must be placed in **config.py**.
+
+Example configuration:
+
+```
+MODEL_PROVIDER = "ollama"
+
+OLLAMA_MODEL = "qwen2.5"
+
+KIMI_API_KEY = ""
+DEEPSEEK_API_KEY = ""
+
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 200
+
+SUMMARY_STYLE = "outline"
+
+SUMMARY_DETAIL_LEVEL = 2
+SUMMARY_BULLET_COUNT = 10
+```
+
+Users should be able to adjust:
+
+* model provider
+* chunk size
+* summarization mode
+* summary detail level
+* bullet count
+* outline depth
+
+---
+
+# 6. Download Module
+
+File:
+
+```
+pipeline/download.py
+```
+
+Responsibilities:
+
+* download video using yt-dlp
+
+Command:
+
+```
+yt-dlp -o video.mp4 URL
+```
+
+If input is a local file, skip this module.
+
+Output:
+
+```
+video.mp4
+```
+
+---
+
+# 7. Transcription Module
+
+File:
+
+```
+pipeline/transcribe.py
+```
+
+Use:
+
+WhisperX
+
+Command example:
+
+```
+whisperx video.mp4 --model large-v3 --device cuda
+```
+
+Output:
+
+```
+video.json
+```
+
+The JSON contains:
+
+* transcript text
+* timestamps
+* segments
+
+The system must **not modify the WhisperX output format**.
+
+---
+
+# 8. Transcript Loader
+
+File:
+
+```
+utils/transcript_loader.py
+```
+
+Responsibilities:
+
+* load WhisperX JSON
+* merge text segments
+* return a full transcript string
+
+Example output:
+
+```
+full_transcript = "..."
+```
+
+---
+
+# 9. Text Chunking Module
+
+File:
+
+```
+pipeline/chunker.py
+```
+
+Use:
+
+LangChain RecursiveCharacterTextSplitter
+
+Example parameters:
+
+```
+chunk_size = 1200
+chunk_overlap = 200
+```
+
+Output format:
+
+```
+chunks = [
+    "text chunk 1",
+    "text chunk 2",
+    "text chunk 3"
+]
+```
+
+Chunking must preserve contextual continuity.
+
+---
+
+# 10. LLM Adapter Layer
+
+File:
+
+```
+llm/adapter.py
+```
+
+Purpose:
+
+Provide a **unified interface** for different LLM providers.
+
+Required interface:
+
+```
+generate(prompt) -> text
+```
+
+Example structure:
+
+```
+class LLMAdapter:
+
+    def __init__(self, provider):
+        self.provider = provider
+
+    def generate(self, prompt):
+        if self.provider == "ollama":
+            return ollama_generate(prompt)
+
+        if self.provider == "kimi":
+            return kimi_generate(prompt)
+
+        if self.provider == "deepseek":
+            return deepseek_generate(prompt)
+```
+
+Supported providers:
+
+```
+ollama
+kimi
+deepseek
+```
+
+Adding a new model only requires creating a new client file.
+
+---
+
+# 11. Summarization Strategies
+
+The system must support multiple summarization modes.
+
+All strategies are located in:
+
+```
+summarizers/
+```
+
+---
+
+## 11.1 Map-Reduce Summary
+
+File:
+
+```
+summarizers/map_reduce.py
+```
+
+Process:
+
+```
+chunk → partial summary
+partial summaries → final summary
+```
+
+Advantages:
+
+* stable
+* scalable
+* low hallucination risk
+
+Recommended for long videos.
+
+---
+
+## 11.2 Timeline Summary
+
+File:
+
+```
+summarizers/timeline_summary.py
+```
+
+Output example:
+
+```
+00:00 Introduction
+02:15 Core idea explained
+05:40 Demonstration
+08:30 Conclusion
+```
+
+Best for:
+
+* tutorials
+* lectures
+
+---
+
+## 11.3 Outline Summary
+
+File:
+
+```
+summarizers/outline_summary.py
+```
+
+Output example:
+
+```
+1. Introduction
+   1.1 Background
+   1.2 Objective
+
+2. Core Concepts
+   2.1 Key Idea
+   2.2 Implementation
+```
+
+Best for:
+
+* educational content
+* technical talks
+
+---
+
+# 12. Prompt Design
+
+All prompts must follow strict rules.
+
+Baseline prompt:
+
+```
+You must summarize ONLY the provided transcript.
+
+Do not add external knowledge.
+
+Do not speculate.
+
+Use clear bullet points.
+```
+
+Purpose:
+
+* reduce hallucination
+* ensure factual accuracy
+
+---
+
+# 13. Output Module
+
+File:
+
+```
+pipeline/output.py
+```
+
+Output format:
+
+```
+summary.md
+```
+
+Example structure:
+
+```
+# Video Summary
+
+## Key Points
+
+- Point 1
+- Point 2
+- Point 3
+
+## Timeline
+
+00:00 Introduction
+02:30 Main topic
+05:10 Example
+
+## Outline
+
+1. Main topic
+   1.1 Subtopic
+   1.2 Subtopic
+```
+
+---
+
+# 14. CLI Usage
+
+Run with URL:
+
+```
+python main.py --url VIDEO_URL
+```
+
+Run with local file:
+
+```
+python main.py --file video.mp4
+```
+
+Select LLM provider:
+
+```
+--llm ollama
+--llm kimi
+--llm deepseek
+```
+
+Select summarization mode:
+
+```
+--mode outline
+--mode timeline
+--mode mapreduce
+```
+
+Optional parameters:
+
+```
+--detail-level 1-5
+--bullet-count 10
+```
+
+---
+
+# 15. Reliability Design
+
+The system must include:
+
+### Retry mechanism
+
+API retry:
+
+```
+retry = 3
+```
+
+### Intermediate file storage
+
+Required files:
+
+```
+video.json
+chunks.json
+partial_summary.json
+```
+
+Benefits:
+
+* restart capability
+* debugging
+* crash recovery
+
+### Module independence
+
+Each pipeline stage must run independently.
+
+---
+
+# 16. Performance Recommendations
+
+Speech recognition:
+
+Use GPU acceleration:
+
+```
+WhisperX CUDA
+```
+
+LLM quality ranking:
+
+1. Kimi
+2. DeepSeek
+3. Local Ollama models
+
+Local models recommended:
+
+```
+qwen2.5
+llama3
+```
+
+---
+
+# 17. Minimum Viable Product
+
+The MVP must support:
+
+* video download
+* transcription
+* chunking
+* map-reduce summarization
+* LLM switching
+
+Expected code size:
+
+```
+200–400 lines
+```
+
+---
+
+# 18. Definition of Done
+
+The system is complete when it can:
+
+1. Download video
+2. Transcribe speech
+3. Generate structured summaries
+4. Output Markdown
+
+And support:
+
+```
+LLM switching
+summarization mode switching
+configurable summary detail
+```
