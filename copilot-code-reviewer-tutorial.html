@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copilot Code Reviewer 深度实现教程</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1c2333;
+            --bg-code: #0d1117;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-link: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --accent-orange: #d29922;
+            --accent-red: #f85149;
+            --accent-cyan: #39d353;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            font-size: 16px;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding: 20px 0;
+            z-index: 100;
+        }
+
+        .sidebar h2 {
+            padding: 10px 20px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 8px 20px 8px 28px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar a:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+            border-left-color: var(--accent-blue);
+        }
+
+        .sidebar a.level-2 {
+            padding-left: 40px;
+            font-size: 13px;
+        }
+
+        .sidebar a.level-3 {
+            padding-left: 52px;
+            font-size: 12px;
+        }
+
+        .main-content {
+            margin-left: 280px;
+            max-width: 900px;
+            padding: 40px 60px;
+            margin-right: auto;
+        }
+
+        h1 {
+            font-size: 2.2em;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: 1.6em;
+            margin-top: 48px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--accent-blue);
+        }
+
+        h3 {
+            font-size: 1.3em;
+            margin-top: 32px;
+            margin-bottom: 12px;
+            color: var(--accent-purple);
+        }
+
+        h4 {
+            font-size: 1.1em;
+            margin-top: 24px;
+            margin-bottom: 8px;
+            color: var(--accent-orange);
+        }
+
+        p {
+            margin-bottom: 16px;
+            color: var(--text-primary);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        ul, ol {
+            margin: 16px 0;
+            padding-left: 24px;
+            color: var(--text-primary);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        li {
+            margin: 8px 0;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        pre {
+            background: var(--bg-code);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            overflow-x: auto;
+            margin: 16px 0;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        code {
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+        }
+
+        :not(pre) > code {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: var(--accent-orange);
+        }
+
+        .highlight-comment {
+            color: #8b949e;
+            font-style: italic;
+        }
+
+        .highlight-keyword {
+            color: #ff7b72;
+        }
+
+        .highlight-string {
+            color: #a5d6ff;
+        }
+
+        .highlight-function {
+            color: #d2a8ff;
+        }
+
+        .highlight-class {
+            color: #ffa657;
+        }
+
+        .highlight-decorator {
+            color: #ffa657;
+        }
+
+        .highlight-number {
+            color: #79c0ff;
+        }
+
+        .highlight-import {
+            color: #ff7b72;
+        }
+
+        .info-box {
+            background: rgba(56, 139, 253, 0.1);
+            border: 1px solid rgba(56, 139, 253, 0.3);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 20px 0;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .info-box p {
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .info-box.tip {
+            background: rgba(63, 185, 80, 0.1);
+            border-color: rgba(63, 185, 80, 0.3);
+        }
+
+        .info-box.warning {
+            background: rgba(210, 153, 34, 0.1);
+            border-color: rgba(210, 153, 34, 0.3);
+        }
+
+        .info-box.danger {
+            background: rgba(248, 81, 73, 0.1);
+            border-color: rgba(248, 81, 73, 0.3);
+        }
+
+        .info-box-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .info-box.tip .info-box-title { color: var(--accent-green); }
+        .info-box .info-box-title { color: var(--accent-blue); }
+        .info-box.warning .info-box-title { color: var(--accent-orange); }
+        .info-box.danger .info-box-title { color: var(--accent-red); }
+
+        .architecture-diagram {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: center;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .architecture-diagram p {
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .architecture-diagram span {
+            font-size: 16px;
+        }
+
+        .architecture-diagram div {
+            font-size: 16px;
+        }
+
+        .flow-box {
+            display: inline-block;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--accent-blue);
+            border-radius: 8px;
+            padding: 10px 18px;
+            margin: 6px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .flow-box.green { border-color: var(--accent-green); color: var(--accent-green); }
+        .flow-box.blue { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .flow-box.purple { border-color: var(--accent-purple); color: var(--accent-purple); }
+        .flow-box.orange { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .flow-box.red { border-color: var(--accent-red); color: var(--accent-red); }
+        .flow-box.cyan { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        .flow-arrow {
+            display: inline-block;
+            color: var(--text-secondary);
+            font-size: 20px;
+            margin: 0 4px;
+            vertical-align: middle;
+        }
+
+        .flow-row {
+            margin: 12px 0;
+        }
+
+        .file-tree {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 16px 0;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 16px;
+            line-height: 1.8;
+        }
+
+        .file-tree .dir { color: var(--accent-blue); font-weight: 600; }
+        .file-tree .file { color: var(--text-primary); }
+        .file-tree .desc { color: var(--text-secondary); font-family: inherit; font-size: 15px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        td {
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            color: #fff;
+            font-weight: 700;
+            font-size: 14px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            margin: 14px 0;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .step-text {
+            padding-top: 2px;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .step-text strong {
+            font-size: 16px;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        .comparison > div {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .comparison h4 {
+            margin-top: 0;
+        }
+
+        .comparison p {
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .badge-required { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+        .badge-optional { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .badge-default { background: rgba(210, 153, 34, 0.2); color: var(--accent-orange); }
+
+        strong {
+            font-size: 16px;
+        }
+
+        a {
+            font-size: 16px;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .main-content { margin-left: 0; padding: 20px; }
+            .comparison { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="sidebar">
+    <h2>目录导航</h2>
+    <a href="#overview">项目概览</a>
+    <a href="#architecture">系统架构</a>
+    <a href="#file-structure">文件结构</a>
+    <a href="#data-flow">完整数据流</a>
+    <a href="#copilot-sdk">Copilot SDK 深度解析</a>
+    <a href="#sdk-client" class="level-2">CopilotClient 生命周期</a>
+    <a href="#sdk-session" class="level-2">create_session 参数全解</a>
+    <a href="#sdk-send" class="level-2">send_and_wait 机制</a>
+    <a href="#sdk-streaming" class="level-2">Streaming 流式输出</a>
+    <a href="#sdk-tools" class="level-2">自定义工具系统</a>
+    <a href="#sdk-provider" class="level-2">Provider 配置</a>
+    <a href="#sdk-quickstart" class="level-2">Quick Start 示例拆解</a>
+    <a href="#reviewer">Reviewer 核心逻辑</a>
+    <a href="#reviewer-prompt" class="level-2">Prompt 构建</a>
+    <a href="#reviewer-session" class="level-2">会话与流式处理</a>
+    <a href="#reviewer-parse" class="level-2">结构化结果解析</a>
+    <a href="#service">Service 业务编排</a>
+    <a href="#gitlab">GitLab API 交互</a>
+    <a href="#models">数据模型</a>
+    <a href="#config">配置系统</a>
+    <a href="#store">持久化存储</a>
+    <a href="#frontend">前端界面</a>
+    <a href="#main">FastAPI 路由</a>
+    <a href="#summary">总结与扩展</a>
+</nav>
+
+<main class="main-content">
+
+<h1>Copilot Code Reviewer 深度实现教程</h1>
+<p class="subtitle">深入理解 GitHub Copilot SDK 驱动的 GitLab MR 自动代码审查系统</p>
+
+<!-- ==================== 项目概览 ==================== -->
+<h2 id="overview">项目概览</h2>
+<p><strong>copilot-code-reviewer</strong> 是一个基于 GitHub Copilot SDK 的自动化代码审查工具。它监听 GitLab Merge Request 的 Webhook 事件，自动克隆代码仓库、生成 diff，调用 Copilot SDK 进行 AI 分析，然后将审查结果以 summary note 和 inline discussion 的形式回写到 GitLab MR。</p>
+
+<div class="info-box tip">
+    <div class="info-box-title">核心价值</div>
+    <p>这个项目展示了如何将 GitHub Copilot SDK（原本为 VS Code 扩展设计的 AI 能力）独立于编辑器之外，构建成一个服务端 AI Agent。它不是简单的 API 调用，而是利用了 Copilot SDK 的完整 Agent 能力：会话管理、流式输出、权限控制、自定义工具等。</p>
+</div>
+
+<!-- ==================== 系统架构 ==================== -->
+<h2 id="architecture">系统架构</h2>
+
+<div class="architecture-diagram">
+    <div class="flow-row">
+        <span class="flow-box green">GitLab MR</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box blue">Webhook</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box purple">FastAPI 后端</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box orange">Copilot SDK</span>
+    </div>
+    <div class="flow-row">
+        <span class="flow-box orange">AI 分析结果</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box purple">解析 &amp; 过滤</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box blue">GitLab API</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box green">MR Note/Discussion</span>
+    </div>
+    <div class="flow-row" style="margin-top: 20px;">
+        <span class="flow-box cyan">React 前端</span>
+        <span class="flow-arrow">↔</span>
+        <span class="flow-box purple">FastAPI 后端</span>
+        <span class="flow-arrow">↔</span>
+        <span class="flow-box red">JSON 文件存储</span>
+    </div>
+</div>
+
+<p>系统分为三个主要层次：</p>
+<div class="step-item"><span class="step-number">1</span><span class="step-text"><strong>触发层</strong>：GitLab Webhook 在 MR 创建/更新时触发通知</span></div>
+<div class="step-item"><span class="step-number">2</span><span class="step-text"><strong>处理层</strong>：FastAPI 后端接收 Webhook，克隆仓库、生成 diff、调用 Copilot SDK 分析、解析结果</span></div>
+<div class="step-item"><span class="step-number">3</span><span class="step-text"><strong>反馈层</strong>：将审查结果通过 GitLab API 写回为 MR Note 和 Inline Discussion</span></div>
+
+<!-- ==================== 文件结构 ==================== -->
+<h2 id="file-structure">文件结构</h2>
+
+<div class="file-tree">
+<span class="dir">copilot-code-reviewer/</span><br>
+├── <span class="dir">backend/</span> <span class="desc">← Python 后端核心</span><br>
+│   ├── <span class="file">run.py</span> <span class="desc">← 入口脚本</span><br>
+│   ├── <span class="file">requirements.txt</span> <span class="desc">← Python 依赖</span><br>
+│   └── <span class="dir">app/</span><br>
+│       ├── <span class="file">config.py</span> <span class="desc">← 配置管理（Pydantic Settings）</span><br>
+│       ├── <span class="file">models.py</span> <span class="desc">← 数据模型（Pydantic BaseModel）</span><br>
+│       ├── <span class="file">gitlab.py</span> <span class="desc">← GitLab API 客户端封装</span><br>
+│       ├── <span class="file">store.py</span> <span class="desc">← JSON 文件持久化存储</span><br>
+│       ├── <span class="file">reviewer.py</span> <span class="desc">← ★ Copilot SDK 核心审查逻辑</span><br>
+│       ├── <span class="file">service.py</span> <span class="desc">← 业务编排层</span><br>
+│       └── <span class="file">main.py</span> <span class="desc">← FastAPI 路由定义</span><br>
+├── <span class="dir">copilot-sdk-quick-start/</span> <span class="desc">← SDK 快速入门示例</span><br>
+│   └── <span class="file">app.py</span> <span class="desc">← ★ Copilot SDK 完整参数演示</span><br>
+├── <span class="dir">frontend/</span> <span class="desc">← React 前端</span><br>
+│   └── <span class="dir">src/</span><br>
+│       ├── <span class="file">App.jsx</span> <span class="desc">← 主界面组件</span><br>
+│       ├── <span class="file">main.jsx</span> <span class="desc">← 入口</span><br>
+│       └── <span class="file">styles.css</span> <span class="desc">← 样式</span><br>
+└── <span class="file">.env.example</span> <span class="desc">← 环境变量模板</span>
+</div>
+
+<!-- ==================== 完整数据流 ==================== -->
+<h2 id="data-flow">完整数据流</h2>
+
+<p>一次完整的代码审查流程如下：</p>
+
+<div class="step-item"><span class="step-number">1</span><span class="step-text"><strong>Webhook 触发</strong>：开发者在 MR 评论中包含触发关键词（如 <code>/copilot-review</code>），GitLab 发送 Note 事件到后端</span></div>
+<div class="step-item"><span class="step-number">2</span><span class="step-text"><strong>验证 &amp; 去重</strong>：<code>service.verify_webhook_token()</code> 验证签名，<code>maybe_schedule_review()</code> 检查事件类型、关键词、去重</span></div>
+<div class="step-item"><span class="step-number">3</span><span class="step-text"><strong>后台任务</strong>：通过 FastAPI <code>BackgroundTasks</code> 异步执行 <code>_run_review_job()</code></span></div>
+<div class="step-item"><span class="step-number">4</span><span class="step-text"><strong>获取 MR 数据</strong>：调用 GitLab API 获取 MR 详情和 changes</span></div>
+<div class="step-item"><span class="step-number">5</span><span class="step-text"><strong>克隆仓库</strong>：<code>reviewer.clone_or_update_repo()</code> 使用 GitPython 克隆/更新源和目标仓库</span></div>
+<div class="step-item"><span class="step-number">6</span><span class="step-text"><strong>生成 Diff</strong>：<code>reviewer.build_diff_from_repo()</code> 生成 unified diff</span></div>
+<div class="step-item"><span class="step-number">7</span><span class="step-text"><strong>构建 Prompt</strong>：<code>reviewer._build_prompt()</code> 将 diff + MR 元数据组装成结构化 prompt</span></div>
+<div class="step-item"><span class="step-number">8</span><span class="step-text"><strong>调用 Copilot SDK</strong>：<code>reviewer.review()</code> 创建 CopilotClient → 创建 Session → send_and_wait</span></div>
+<div class="step-item"><span class="step-number">9</span><span class="step-text"><strong>流式接收</strong>：通过 session 事件监听器实时捕获 <code>assistant.message_delta</code> 流式文本</span></div>
+<div class="step-item"><span class="step-number">10</span><span class="step-text"><strong>解析结果</strong>：<code>reviewer._parse_structured_review()</code> 将 AI 输出解析为 <code>StructuredReview</code> 模型</span></div>
+<div class="step-item"><span class="step-number">11</span><span class="step-text"><strong>过滤 &amp; 发布</strong>：按严重度过滤 findings，发布 summary note 和 inline discussions</span></div>
+
+<!-- ==================== Copilot SDK 深度解析 ==================== -->
+<h2 id="copilot-sdk">Copilot SDK 深度解析</h2>
+
+<p>这是本教程最核心的部分。Copilot SDK（<code>copilot</code> Python 包）是 GitHub Copilot 的官方 SDK，它提供了完整的 AI Agent 能力。项目中的 <code>copilot-sdk-quick-start/app.py</code> 是一个绝佳的学习入口，它展示了 SDK 的所有参数和能力。</p>
+
+<div class="info-box">
+    <div class="info-box-title">理解 Copilot SDK 的关键</div>
+    <p>Copilot SDK 不是简单的 LLM API 封装。它是一个完整的 <strong>Agent 框架</strong>，包含：客户端生命周期管理、会话（Session）管理、权限控制、工具注册、流式输出、MCP 服务器、自定义 Agent 等能力。理解它的最好方式是从 Quick Start 示例开始。</p>
+</div>
+
+<!-- ===== CopilotClient 生命周期 ===== -->
+<h3 id="sdk-client">CopilotClient 生命周期</h3>
+
+<p>SDK 的使用始于 <code>CopilotClient</code>，它管理着与 Copilot 服务的连接：</p>
+
+<pre><code><span class="highlight-keyword">from</span> copilot <span class="highlight-keyword">import</span> CopilotClient, PermissionHandler, define_tool
+
+<span class="highlight-comment"># 1. 创建客户端实例</span>
+client = CopilotClient()
+
+<span class="highlight-comment"># 2. 启动客户端（建立连接）</span>
+<span class="highlight-keyword">await</span> client.start()
+
+<span class="highlight-comment"># ... 使用客户端创建会话、发送消息 ...
+
+# 3. 停止客户端（释放资源）</span>
+<span class="highlight-keyword">await</span> client.stop()</pre>
+
+<p><code>CopilotClient</code> 的生命周期非常严格：</p>
+
+<div class="comparison">
+    <div>
+        <h4 style="color: var(--accent-green);">✅ 正确用法</h4>
+        <pre><code>client = CopilotClient()
+<span class="highlight-keyword">await</span> client.start()
+<span class="highlight-keyword">try</span>:
+    <span class="highlight-comment"># 创建会话、发送消息</span>
+    ...
+<span class="highlight-keyword">finally</span>:
+    <span class="highlight-keyword">await</span> client.stop()</pre>
+    </div>
+    <div>
+        <h4 style="color: var(--accent-red);">❌ 错误用法</h4>
+        <pre><code>client = CopilotClient()
+<span class="highlight-comment"># 忘记 start() 就直接使用</span>
+session = <span class="highlight-keyword">await</span> client.create_session(...)
+<span class="highlight-comment"># 忘记 stop() 导致资源泄漏</span></pre>
+    </div>
+</div>
+
+<p>在实际项目中（<code>reviewer.py</code>），客户端还可以传入配置：</p>
+
+<pre><code>client = CopilotClient({
+    <span class="highlight-string">"cwd"</span>: context.repo_path,     <span class="highlight-comment"># 工作目录，影响文件访问权限</span>
+    <span class="highlight-string">"log_level"</span>: <span class="highlight-string">"error"</span>        <span class="highlight-comment"># 日志级别</span>
+})</pre>
+
+<div class="info-box tip">
+    <div class="info-box-title">cwd 参数的作用</div>
+    <p><code>cwd</code> 参数非常重要！它决定了 Copilot Agent 的工作目录。SDK 会基于此目录来解析文件路径、执行命令等。在 reviewer 中，它被设置为克隆下来的仓库路径，这样 AI 就能"看到"项目代码。</p>
+</div>
+
+<!-- ===== create_session 参数全解 ===== -->
+<h3 id="sdk-session">create_session 参数全解</h3>
+
+<p><code>create_session()</code> 是 SDK 最核心的方法，它创建一个 AI 会话。Quick Start 示例详细展示了所有可用参数：</p>
+
+<pre><code>session_config: dict[str, Any] = {
+    <span class="highlight-comment"># ===== 必需参数 =====</span>
+    <span class="highlight-string">"on_permission_request"</span>: PermissionHandler.approve_all,
+    <span class="highlight-comment"># 必需！处理工具/文件/命令的权限请求。
+    # PermissionHandler.approve_all 表示自动批准所有请求。
+    # 在生产环境中，你可能需要自定义处理逻辑。</span>
+
+    <span class="highlight-comment"># ===== 可选参数 =====</span>
+    <span class="highlight-string">"tools"</span>: [multiply_numbers],
+    <span class="highlight-comment"># 自定义工具列表。这些工具会暴露给 AI 模型，
+    # AI 可以在会话中主动调用它们。</span>
+
+    <span class="highlight-string">"session_id"</span>: None,
+    <span class="highlight-comment"># 自定义会话 ID。None 表示 SDK 自动生成。</span>
+
+    <span class="highlight-string">"client_name"</span>: None,
+    <span class="highlight-comment"># 客户端名称，出现在请求元数据中。
+    # 用于标识调用来源。</span>
+
+    <span class="highlight-string">"model"</span>: None,
+    <span class="highlight-comment"># 指定 AI 模型。None 使用 CLI/服务器默认模型。
+    # 例如 "claude-sonnet-4" 或 "gpt-4o"。</span>
+
+    <span class="highlight-string">"reasoning_effort"</span>: None,
+    <span class="highlight-comment"># 推理力度。覆盖默认的推理级别。
+    # 值越大，AI 思考越深入，但响应越慢。</span>
+
+    <span class="highlight-string">"system_message"</span>: None,
+    <span class="highlight-comment"># 自定义系统提示。None 使用内置默认。</span>
+
+    <span class="highlight-string">"available_tools"</span>: None,
+    <span class="highlight-comment"># 工具白名单。None 表示不额外限制。</span>
+
+    <span class="highlight-string">"excluded_tools"</span>: None,
+    <span class="highlight-comment"># 工具黑名单。None 表示不额外排除。</span>
+
+    <span class="highlight-string">"on_user_input_request"</span>: None,
+    <span class="highlight-comment"># 处理 ask_user 风格的请求。
+    # None 表示不处理用户输入请求。</span>
+
+    <span class="highlight-string">"hooks"</span>: {},
+    <span class="highlight-comment"># 会话生命周期钩子。
+    # 可以注册回调来监听会话的创建、销毁等事件。</span>
+
+    <span class="highlight-string">"working_directory"</span>: None,
+    <span class="highlight-comment"># 会话工作目录。覆盖客户端默认值。</span>
+
+    <span class="highlight-string">"provider"</span>: None,
+    <span class="highlight-comment"># AI 提供商配置。None 使用默认 Copilot 提供商。
+    # 可以配置为使用 BYOK（Bring Your Own Key）提供商。</span>
+
+    <span class="highlight-string">"streaming"</span>: False,
+    <span class="highlight-comment"># 是否请求增量 delta 事件。
+    # True 时会收到 message_delta 事件，实现流式输出。</span>
+
+    <span class="highlight-string">"mcp_servers"</span>: {},
+    <span class="highlight-comment"># 额外的 MCP（Model Context Protocol）服务器。
+    # MCP 是一种标准化的工具/资源提供协议。</span>
+
+    <span class="highlight-string">"custom_agents"</span>: [],
+    <span class="highlight-comment"># 自定义 Agent 列表。
+    # 可以注册专门的 Agent 来处理特定任务。</span>
+
+    <span class="highlight-string">"config_dir"</span>: None,
+    <span class="highlight-comment"># 配置/状态目录。覆盖默认路径。</span>
+
+    <span class="highlight-string">"skill_directories"</span>: [],
+    <span class="highlight-comment"># 额外的技能目录。加载自定义技能。</span>
+
+    <span class="highlight-string">"disabled_skills"</span>: [],
+    <span class="highlight-comment"># 禁用的技能列表。</span>
+
+    <span class="highlight-string">"infinite_sessions"</span>: {
+        <span class="highlight-string">"enabled"</span>: True,
+        <span class="highlight-comment"># 默认启用无限会话。
+        # 会话不会自动过期，可以持续交互。</span>
+
+        <span class="highlight-string">"background_compaction_threshold"</span>: 0.80,
+        <span class="highlight-comment"># 后台压缩阈值。当上下文使用超过 80% 时，
+        # SDK 会自动压缩历史消息以释放空间。</span>
+
+        <span class="highlight-string">"buffer_exhaustion_threshold"</span>: 0.95,
+        <span class="highlight-comment"># 缓冲耗尽阈值。当使用超过 95% 时，
+        # SDK 会阻塞新输入直到压缩完成。</span>
+    },
+}
+
+<span class="highlight-comment"># 创建会话</span>
+<span class="highlight-keyword">async with await</span> client.create_session(session_config) <span class="highlight-keyword">as</span> session:
+    ...</pre>
+
+<div class="info-box warning">
+    <div class="info-box-title">参数分类速查</div>
+    <table>
+        <tr><th>分类</th><th>参数</th><th>说明</th></tr>
+        <tr><td><span class="badge badge-required">必需</span></td><td><code>on_permission_request</code></td><td>权限处理器，SDK 强制要求</td></tr>
+        <tr><td><span class="badge badge-optional">可选</span></td><td><code>tools</code></td><td>自定义工具，扩展 AI 能力</td></tr>
+        <tr><td><span class="badge badge-optional">可选</span></td><td><code>model</code></td><td>指定 AI 模型</td></tr>
+        <tr><td><span class="badge badge-optional">可选</span></td><td><code>streaming</code></td><td>启用流式输出</td></tr>
+        <tr><td><span class="badge badge-optional">可选</span></td><td><code>provider</code></td><td>BYOK 提供商配置</td></tr>
+        <tr><td><span class="badge badge-default">默认行为</span></td><td><code>infinite_sessions</code></td><td>自动管理上下文窗口</td></tr>
+    </table>
+</div>
+
+<!-- ===== send_and_wait 机制 ===== -->
+<h3 id="sdk-send">send_and_wait 机制</h3>
+
+<p>创建会话后，通过 <code>send_and_wait()</code> 发送消息并等待 AI 响应：</p>
+
+<pre><code>message_options: dict[str, Any] = {
+    <span class="highlight-comment"># ===== 必需参数 =====</span>
+    <span class="highlight-string">"prompt"</span>: <span class="highlight-string">"Call the multiply_numbers tool to calculate 6 * 7..."</span>,
+    <span class="highlight-comment"># 发送给会话的消息文本。
+    # 这是 AI 处理的主要输入。</span>
+
+    <span class="highlight-comment"># ===== 默认行为参数 =====</span>
+    <span class="highlight-string">"attachments"</span>: None,
+    <span class="highlight-comment"># 文件、目录或选区附件。
+    # 可以附加文件内容供 AI 参考。</span>
+
+    <span class="highlight-string">"mode"</span>: None,
+    <span class="highlight-comment"># 发送模式。None 使用 SDK 默认（enqueue）。
+    # 可选 "immediate" 跳过队列立即处理。</span>
+}
+
+<span class="highlight-comment"># 超时设置（秒）</span>
+send_timeout = 60.0
+
+response = <span class="highlight-keyword">await</span> session.send_and_wait(
+    message_options,
+    timeout=send_timeout,
+)
+
+<span class="highlight-comment"># 获取响应内容</span>
+content = response.data.content</pre>
+
+<p><code>send_and_wait</code> 的工作流程：</p>
+
+<div class="architecture-diagram">
+    <div class="flow-row">
+        <span class="flow-box blue">发送 prompt</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box purple">SDK 入队</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box orange">AI 处理</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box green">返回响应</span>
+    </div>
+</div>
+
+<div class="info-box">
+    <div class="info-box-title">send_and_wait vs 事件监听</div>
+    <p><code>send_and_wait</code> 会阻塞直到 AI 完成响应（或超时）。但如果启用了 <code>streaming=True</code>，你还可以通过 <code>session.on()</code> 注册事件监听器来实时接收增量输出。这两种机制可以同时使用！</p>
+</div>
+
+<!-- ===== Streaming 流式输出 ===== -->
+<h3 id="sdk-streaming">Streaming 流式输出</h3>
+
+<p>流式输出是本项目中 Copilot SDK 使用的关键特性。在 <code>reviewer.py</code> 中，会话配置了 <code>streaming=True</code>，然后通过事件监听器实时捕获 AI 输出：</p>
+
+<pre><code><span class="highlight-comment"># 1. 配置会话启用流式</span>
+session_params = {
+    <span class="highlight-string">"model"</span>: settings.copilot_model,
+    <span class="highlight-string">"on_permission_request"</span>: PermissionHandler.approve_all,
+    <span class="highlight-string">"streaming"</span>: True,    <span class="highlight-comment"># ← 启用流式输出</span>
+}
+
+<span class="highlight-comment"># 2. 注册事件处理器</span>
+<span class="highlight-keyword">def</span> <span class="highlight-function">handle_event</span>(event) -> None:
+    event_type = getattr(getattr(event, <span class="highlight-string">"type"</span>, None), <span class="highlight-string">"value"</span>,
+                         getattr(event, <span class="highlight-string">"type"</span>, <span class="highlight-string">"unknown"</span>))
+    data = getattr(event, <span class="highlight-string">"data"</span>, None)
+    delta_text = self._extract_delta_text(data)
+
+    <span class="highlight-comment"># 3. 处理流式文本增量</span>
+    <span class="highlight-keyword">if</span> event_type == <span class="highlight-string">"assistant.message_delta"</span> <span class="highlight-keyword">and</span> delta_text:
+        append_stream_text(<span class="highlight-string">"copilot-stream"</span>, delta_text)
+        <span class="highlight-keyword">return</span>
+
+    <span class="highlight-comment"># 4. 忽略推理和流式控制的增量</span>
+    <span class="highlight-keyword">if</span> event_type <span class="highlight-keyword">in</span> {<span class="highlight-string">"assistant.reasoning_delta"</span>,
+                      <span class="highlight-string">"assistant.streaming_delta"</span>}:
+        <span class="highlight-keyword">return</span>
+
+session.on(handle_event)
+
+<span class="highlight-comment"># 5. 发送消息</span>
+response = <span class="highlight-keyword">await</span> session.send_and_wait(
+    {<span class="highlight-string">"prompt"</span>: prompt},
+    timeout=settings.copilot_timeout_seconds
+)</pre>
+
+<p>SDK 会发出以下类型的事件：</p>
+
+<table>
+    <tr><th>事件类型</th><th>含义</th><th>本项目处理</th></tr>
+    <tr><td><code>assistant.message_delta</code></td><td>AI 输出的文本增量</td><td>✅ 捕获并累积到 stream_buffer</td></tr>
+    <tr><td><code>assistant.reasoning_delta</code></td><td>AI 推理过程的增量</td><td>❌ 忽略</td></tr>
+    <tr><td><code>assistant.streaming_delta</code></td><td>流式控制增量</td><td>❌ 忽略</td></tr>
+    <tr><td>其他事件</td><td>工具调用、状态变更等</td><td>记录日志</td></tr>
+</table>
+
+<div class="info-box tip">
+    <div class="info-box-title">为什么优先使用累积的流式输出？</div>
+    <p>项目中有这样的逻辑：<code>if accumulated: content = accumulated</code>。这是因为 <code>response.data.content</code> 在某些提供商配置下可能被截断（如 Ollama），而通过 <code>message_delta</code> 事件累积的文本是完整的原始模型输出。所以<strong>累积流式输出是比 response.content 更可靠的结果来源</strong>。</p>
+</div>
+
+<!-- ===== 自定义工具系统 ===== -->
+<h3 id="sdk-tools">自定义工具系统</h3>
+
+<p>Copilot SDK 允许你注册自定义工具，AI 可以在会话中主动调用它们。Quick Start 示例展示了完整的工具定义流程：</p>
+
+<pre><code><span class="highlight-keyword">from</span> copilot <span class="highlight-keyword">import</span> define_tool
+<span class="highlight-keyword">from</span> pydantic <span class="highlight-keyword">import</span> BaseModel, Field
+
+<span class="highlight-comment"># 1. 定义工具的参数模型</span>
+<span class="highlight-keyword">class</span> <span class="highlight-class">MultiplyParams</span>(BaseModel):
+    a: int = Field(description=<span class="highlight-string">"The first integer to multiply"</span>)
+    b: int = Field(description=<span class="highlight-string">"The second integer to multiply"</span>)
+
+<span class="highlight-comment"># 2. 使用 @define_tool 装饰器注册工具</span>
+<span class="highlight-decorator">@define_tool</span>(description=<span class="highlight-string">"Multiply two integers and return the product"</span>)
+<span class="highlight-keyword">def</span> <span class="highlight-function">multiply_numbers</span>(params: MultiplyParams) -> str:
+    product = params.a * params.b
+    <span class="highlight-keyword">return</span> str(product)
+
+<span class="highlight-comment"># 3. 在创建会话时传入工具</span>
+session_config = {
+    <span class="highlight-string">"tools"</span>: [multiply_numbers],  <span class="highlight-comment"># ← 注册工具</span>
+    ...
+}</pre>
+
+<p>工具系统的运作流程：</p>
+
+<div class="architecture-diagram">
+    <div class="flow-row">
+        <span class="flow-box blue">用户 prompt</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box purple">AI 决策</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box orange">调用工具</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box green">返回结果</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box purple">AI 继续推理</span>
+    </div>
+</div>
+
+<div class="info-box">
+    <div class="info-box-title">工具定义三要素</div>
+    <p>① <strong>参数模型</strong>：Pydantic BaseModel，描述工具输入，Field 的 description 会告诉 AI 每个参数的含义<br>
+    ② <strong>@define_tool 装饰器</strong>：注册工具，description 告诉 AI 这个工具做什么<br>
+    ③ <strong>实现函数</strong>：接收参数模型，返回字符串结果</p>
+</div>
+
+<p>在本项目中，reviewer 没有注册自定义工具，而是完全依赖 AI 的文本生成能力。但工具系统为扩展留下了空间——例如，你可以注册一个"查询项目编码规范"的工具，让 AI 在审查时参考。</p>
+
+<!-- ===== Provider 配置 ===== -->
+<h3 id="sdk-provider">Provider 配置</h3>
+
+<p>SDK 支持两种提供商模式：</p>
+
+<div class="comparison">
+    <div>
+        <h4 style="color: var(--accent-blue);">默认 Copilot 提供商</h4>
+        <p>使用 GitHub Copilot 的后端服务，需要有效的 Copilot 订阅。这是默认模式，无需额外配置。</p>
+        <pre><code>session_params = {
+    <span class="highlight-comment"># 不设置 provider</span>
+    <span class="highlight-string">"model"</span>: <span class="highlight-string">"claude-sonnet-4"</span>,
+}</code></pre>
+    </div>
+    <div>
+        <h4 style="color: var(--accent-purple);">BYOK 提供商</h4>
+        <p>Bring Your Own Key——使用自己的 API Key 和端点。支持 OpenAI 兼容接口。</p>
+        <pre><code>provider = {
+    <span class="highlight-string">"type"</span>: <span class="highlight-string">"openai"</span>,
+    <span class="highlight-string">"base_url"</span>: <span class="highlight-string">"https://api.openai.com/v1"</span>,
+    <span class="highlight-string">"api_key"</span>: <span class="highlight-string">"sk-..."</span>,
+}
+session_params = {
+    <span class="highlight-string">"provider"</span>: provider,
+}</code></pre>
+    </div>
+</div>
+
+<p>在 <code>reviewer.py</code> 中，provider 配置是动态的：</p>
+
+<pre><code><span class="highlight-keyword">if</span> settings.copilot_provider_type:
+    provider = {<span class="highlight-string">"type"</span>: settings.copilot_provider_type}
+    <span class="highlight-keyword">if</span> settings.copilot_provider_base_url:
+        provider[<span class="highlight-string">"base_url"</span>] = settings.copilot_provider_base_url
+    <span class="highlight-keyword">if</span> settings.copilot_provider_api_key:
+        provider[<span class="highlight-string">"api_key"</span>] = settings.copilot_provider_api_key
+    session_params[<span class="highlight-string">"provider"</span>] = provider</pre>
+
+<!-- ===== Quick Start 示例拆解 ===== -->
+<h3 id="sdk-quickstart">Quick Start 示例拆解</h3>
+
+<p><code>copilot-sdk-quick-start/app.py</code> 是一个完整的 SDK 使用示例，让我们逐行拆解：</p>
+
+<pre><code><span class="highlight-keyword">import</span> asyncio
+<span class="highlight-keyword">from</span> copilot <span class="highlight-keyword">import</span> CopilotClient, PermissionHandler, define_tool
+<span class="highlight-keyword">from</span> pydantic <span class="highlight-keyword">import</span> BaseModel, Field
+<span class="highlight-keyword">from</span> typing <span class="highlight-keyword">import</span> Any
+
+<span class="highlight-comment"># ========== 第一步：定义自定义工具 ==========</span>
+<span class="highlight-keyword">class</span> <span class="highlight-class">MultiplyParams</span>(BaseModel):
+    a: int = Field(description=<span class="highlight-string">"The first integer to multiply"</span>)
+    b: int = Field(description=<span class="highlight-string">"The second integer to multiply"</span>)
+
+<span class="highlight-decorator">@define_tool</span>(description=<span class="highlight-string">"Multiply two integers and return the product"</span>)
+<span class="highlight-keyword">def</span> <span class="highlight-function">multiply_numbers</span>(params: MultiplyParams) -> str:
+    product = params.a * params.b
+    print(f<span class="highlight-string">"[tool] multiply_numbers called with a={params.a}, b={params.b}"</span>)
+    <span class="highlight-keyword">return</span> str(product)
+
+<span class="highlight-comment"># ========== 第二步：主函数 ==========</span>
+<span class="highlight-keyword">async def</span> <span class="highlight-function">main</span>():
+    <span class="highlight-comment"># 创建并启动客户端</span>
+    client = CopilotClient()
+    <span class="highlight-keyword">await</span> client.start()
+
+    <span class="highlight-keyword">try</span>:
+        <span class="highlight-comment"># ========== 第三步：配置会话 ==========</span>
+        session_config: dict[str, Any] = {
+            <span class="highlight-string">"on_permission_request"</span>: PermissionHandler.approve_all,
+            <span class="highlight-string">"tools"</span>: [multiply_numbers],
+            <span class="highlight-comment"># ... 其他参数见上文详解 ...</span>
+        }
+
+        <span class="highlight-comment"># ========== 第四步：创建会话 ==========</span>
+        <span class="highlight-keyword">async with await</span> client.create_session(session_config) <span class="highlight-keyword">as</span> session:
+            <span class="highlight-comment"># ========== 第五步：发送消息 ==========</span>
+            message_options: dict[str, Any] = {
+                <span class="highlight-string">"prompt"</span>: <span class="highlight-string">"Call the multiply_numbers tool to calculate 6 * 7, "</span>
+                          <span class="highlight-string">"then write a haiku about the result."</span>,
+            }
+
+            send_timeout = 60.0
+            response = <span class="highlight-keyword">await</span> session.send_and_wait(
+                message_options,
+                timeout=send_timeout,
+            )
+            print(response.data.content)
+    <span class="highlight-keyword">finally</span>:
+        <span class="highlight-keyword">await</span> client.stop()
+
+asyncio.run(main())</pre>
+
+<div class="info-box tip">
+    <div class="info-box-title">关键观察</div>
+    <p>注意 <code>async with await client.create_session(...)</code> 的用法——<code>create_session</code> 本身是异步的（需要 await），返回的是一个异步上下文管理器（需要 async with）。这确保了会话资源的正确获取和释放。</p>
+</div>
+
+<!-- ==================== Reviewer 核心逻辑 ==================== -->
+<h2 id="reviewer">Reviewer 核心逻辑</h2>
+
+<p><code>reviewer.py</code> 是整个项目最核心的文件，它封装了 Copilot SDK 的调用和结果处理。</p>
+
+<!-- ===== Prompt 构建 ===== -->
+<h3 id="reviewer-prompt">Prompt 构建</h3>
+
+<p><code>_build_prompt()</code> 方法构建了一个精心设计的结构化 prompt：</p>
+
+<pre><code><span class="highlight-keyword">def</span> <span class="highlight-function">_build_prompt</span>(self, context: MergeRequestContext) -> str:
+    files = []
+    total = 0
+    <span class="highlight-keyword">for</span> item <span class="highlight-keyword">in</span> context.changed_files:
+        diff = (item.get(<span class="highlight-string">'diff'</span>) <span class="highlight-keyword">or</span> <span class="highlight-string">""</span>)[:MAX_FILE_PATCH_CHARS]  <span class="highlight-comment"># 限制单文件 diff 长度</span>
+        block = (
+            f<span class="highlight-string">"File: {item.get('new_path')}\n"</span>
+            f<span class="highlight-string">"Old path: {item.get('old_path')}\n"</span>
+            f<span class="highlight-string">"New file: {item.get('new_file')}\n"</span>
+            f<span class="highlight-string">"Renamed: {item.get('renamed_file')}\n"</span>
+            f<span class="highlight-string">"Deleted: {item.get('deleted_file')}\n"</span>
+            f<span class="highlight-string">"Patch:\n{diff}"</span>
+        )
+        <span class="highlight-keyword">if</span> total + len(block) > MAX_TOTAL_DIFF_CHARS:  <span class="highlight-comment"># 限制总 diff 长度</span>
+            <span class="highlight-keyword">break</span>
+        files.append(block)
+        total += len(block)
+
+    <span class="highlight-keyword">return</span> textwrap.dedent(f<span class="highlight-string">""""
+        You are an expert GitLab merge request reviewer.
+        Write all natural-language output fields in {context.review_language}.
+        ...
+
+        Return ONLY valid JSON. No markdown fences. No commentary.
+        Schema:
+        {{
+          "overall_assessment": "short paragraph",
+          "findings": [
+            {{
+              "title": "short finding title",
+              "severity": "high|medium|low",
+              "file_path": "path/to/file or null",
+              "line": 123,
+              "details": "why it matters",
+              "recommendation": "concise recommendation",
+              "suggested_code": "optional replacement snippet...",
+              "code_language": "optional language like python|javascript|typescript"
+            }}
+          ],
+          "suggested_follow_ups": ["item 1", "item 2"]
+        }}
+
+        Important constraints:
+        - Prefer findings anchored to changed lines in the new file.
+        - Use file_path and line only when you are confident...
+        - If there are no material issues, return an empty findings array.
+        ...
+
+        Merge Request metadata:
+        - Project: {context.project_path}
+        - MR IID: {context.mr_iid}
+        - Title: {context.mr_title}
+        - Author: {context.author}
+        - Source branch: {context.source_branch}
+        - Target branch: {context.target_branch}
+        - URL: {context.web_url}
+        - Trigger comment: {context.trigger_comment}
+
+        Description:
+        {context.mr_description or '(none)'}
+
+        Unified diff:
+        {unified_diff}
+
+        Per-file patches:
+        {per_file_patches}
+        """</span>).strip()</pre>
+
+<div class="info-box warning">
+    <div class="info-box-title">Prompt 设计要点</div>
+    <p>① <strong>角色设定</strong>："You are an expert GitLab merge request reviewer"<br>
+    ② <strong>输出约束</strong>：要求返回纯 JSON，不要 markdown 代码块<br>
+    ③ <strong>Schema 定义</strong>：明确定义 JSON 结构，包括每个字段的含义<br>
+    ④ <strong>重要约束</strong>：优先关联到实际变更行、不确定时不标注行号、无问题则返回空数组<br>
+    ⑤ <strong>上下文信息</strong>：MR 元数据 + unified diff + 逐文件 patch<br>
+    ⑥ <strong>长度限制</strong>：单文件 diff ≤ 18000 字符，总 diff ≤ 60000 字符</p>
+</div>
+
+<!-- ===== 会话与流式处理 ===== -->
+<h3 id="reviewer-session">会话与流式处理</h3>
+
+<p><code>review()</code> 方法是 reviewer 的核心入口，它完整展示了如何在生产环境中使用 Copilot SDK：</p>
+
+<pre><code><span class="highlight-keyword">async def</span> <span class="highlight-function">review</span>(self, context, log_callback=None,
+           stream_start_callback=None, stream_chunk_callback=None,
+           stream_end_callback=None) -> StructuredReview:
+    prompt = self._build_prompt(context)
+
+    <span class="highlight-comment"># 配置会话参数</span>
+    session_params = {
+        <span class="highlight-string">"model"</span>: settings.copilot_model,
+        <span class="highlight-string">"on_permission_request"</span>: PermissionHandler.approve_all,
+        <span class="highlight-string">"streaming"</span>: True,  <span class="highlight-comment"># 启用流式输出</span>
+    }
+
+    <span class="highlight-comment"># 动态配置 provider</span>
+    <span class="highlight-keyword">if</span> settings.copilot_provider_type:
+        provider = {<span class="highlight-string">"type"</span>: settings.copilot_provider_type}
+        ...
+        session_params[<span class="highlight-string">"provider"</span>] = provider
+
+    <span class="highlight-comment"># 创建客户端</span>
+    client = CopilotClient({<span class="highlight-string">"cwd"</span>: context.repo_path, <span class="highlight-string">"log_level"</span>: <span class="highlight-string">"error"</span>})
+    <span class="highlight-keyword">await</span> client.start()
+
+    <span class="highlight-comment"># 流式状态管理</span>
+    stream_state = {<span class="highlight-string">"open"</span>: False, <span class="highlight-string">"last_chunk"</span>: None, <span class="highlight-string">"source"</span>: None}
+    stream_buffer = []
+
+    <span class="highlight-keyword">try</span>:
+        <span class="highlight-keyword">async with await</span> client.create_session(session_params) <span class="highlight-keyword">as</span> session:
+            <span class="highlight-comment"># 定义流式文本处理函数</span>
+            <span class="highlight-keyword">def</span> <span class="highlight-function">append_stream_text</span>(source, text):
+                <span class="highlight-comment"># 去重：相同来源的相同文本不重复添加</span>
+                <span class="highlight-keyword">if</span> text == stream_state[<span class="highlight-string">"last_chunk"</span>] <span class="highlight-keyword">and</span> source == stream_state[<span class="highlight-string">"source"</span>]:
+                    <span class="highlight-keyword">return</span>
+                <span class="highlight-comment"># 来源变化时关闭前一个流</span>
+                <span class="highlight-keyword">if</span> stream_state[<span class="highlight-string">"open"</span>] <span class="highlight-keyword">and</span> stream_state[<span class="highlight-string">"source"</span>] != source:
+                    close_stream_if_needed()
+                <span class="highlight-comment"># 新来源时开启流</span>
+                <span class="highlight-keyword">if not</span> stream_state[<span class="highlight-string">"open"</span>]:
+                    <span class="highlight-keyword">if</span> stream_start_callback:
+                        stream_start_callback(source)
+                    stream_state[<span class="highlight-string">"open"</span>] = True
+                    stream_state[<span class="highlight-string">"source"</span>] = source
+                stream_buffer.append(text)
+                <span class="highlight-keyword">if</span> stream_chunk_callback:
+                    stream_chunk_callback(text)
+                stream_state[<span class="highlight-string">"last_chunk"</span>] = text
+
+            <span class="highlight-comment"># 注册事件处理器</span>
+            <span class="highlight-keyword">def</span> <span class="highlight-function">handle_event</span>(event):
+                event_type = getattr(getattr(event, <span class="highlight-string">"type"</span>, None), <span class="highlight-string">"value"</span>,
+                                     getattr(event, <span class="highlight-string">"type"</span>, <span class="highlight-string">"unknown"</span>))
+                data = getattr(event, <span class="highlight-string">"data"</span>, None)
+                delta_text = self._extract_delta_text(data)
+
+                <span class="highlight-keyword">if</span> event_type == <span class="highlight-string">"assistant.message_delta"</span> <span class="highlight-keyword">and</span> delta_text:
+                    append_stream_text(<span class="highlight-string">"copilot-stream"</span>, delta_text)
+                    <span class="highlight-keyword">return</span>
+
+                <span class="highlight-keyword">if</span> event_type <span class="highlight-keyword">in</span> {<span class="highlight-string">"assistant.reasoning_delta"</span>, <span class="highlight-string">"assistant.streaming_delta"</span>}:
+                    <span class="highlight-keyword">return</span>
+
+                <span class="highlight-comment"># 非流式事件时关闭当前流</span>
+                <span class="highlight-keyword">if</span> stream_state[<span class="highlight-string">"open"</span>] <span class="highlight-keyword">and</span> event_type <span class="highlight-keyword">not in</span> {...}:
+                    close_stream_if_needed()
+
+            session.on(handle_event)
+
+            <span class="highlight-comment"># 发送消息并等待</span>
+            response = <span class="highlight-keyword">await</span> session.send_and_wait(
+                {<span class="highlight-string">"prompt"</span>: prompt},
+                timeout=settings.copilot_timeout_seconds
+            )
+            close_stream_if_needed()
+
+            <span class="highlight-comment"># 优先使用累积的流式输出</span>
+            content = getattr(response.data, <span class="highlight-string">"content"</span>, None)
+            accumulated = <span class="highlight-string">""</span>.join(stream_buffer).strip() <span class="highlight-keyword">if</span> stream_buffer <span class="highlight-keyword">else</span> None
+            <span class="highlight-keyword">if</span> accumulated:
+                content = accumulated
+
+            <span class="highlight-keyword">return</span> self._parse_structured_review(content)
+    <span class="highlight-keyword">finally</span>:
+        <span class="highlight-keyword">if</span> stream_state[<span class="highlight-string">"open"</span>] <span class="highlight-keyword">and</span> stream_end_callback:
+            stream_end_callback()
+        <span class="highlight-keyword">await</span> client.stop()</pre>
+
+<!-- ===== 结构化结果解析 ===== -->
+<h3 id="reviewer-parse">结构化结果解析</h3>
+
+<p>AI 返回的 JSON 需要被解析为结构化的 <code>StructuredReview</code> 对象：</p>
+
+<pre><code><span class="highlight-keyword">def</span> <span class="highlight-function">_parse_structured_review</span>(self, content: str) -> StructuredReview:
+    text = content.strip()
+
+    <span class="highlight-comment"># 处理 markdown 代码块包裹的情况</span>
+    candidate = text
+    <span class="highlight-keyword">if</span> text.startswith(<span class="highlight-string">"```"</span>):
+        match = JSON_BLOCK_RE.search(text)
+        <span class="highlight-keyword">if</span> match:
+            candidate = match.group(1).strip()
+
+    <span class="highlight-comment"># 解析 JSON 并验证</span>
+    <span class="highlight-keyword">try</span>:
+        <span class="highlight-keyword">return</span> StructuredReview.model_validate(json.loads(candidate))
+    <span class="highlight-keyword">except</span> (json.JSONDecodeError, ValidationError) <span class="highlight-keyword">as</span> exc:
+        <span class="highlight-keyword">raise</span> RuntimeError(f<span class="highlight-string">"Unable to parse Copilot review JSON: {exc}"</span>)</pre>
+
+<p>这里有一个精妙的正则表达式处理：</p>
+
+<pre><code>JSON_BLOCK_RE = re.compile(r<span class="highlight-string">"`(?:json)?\s*(.*?)```"</span>, re.DOTALL)</pre>
+
+<div class="info-box">
+    <div class="info-box-title">为什么需要这个正则？</div>
+    <p>尽管 prompt 要求 AI 返回纯 JSON（"No markdown fences"），但 AI 有时仍会用 <code>```json ... ```</code> 包裹输出。正则只在文本以 <code>```</code> 开头时才尝试提取，避免错误匹配 JSON 字符串值中嵌入的代码块（如 <code>suggested_code</code> 字段）。</p>
+</div>
+
+<p>解析后，reviewer 还提供了丰富的渲染方法：</p>
+
+<ul style="margin: 16px 0; padding-left: 24px; color: var(--text-primary);">
+    <li><code>render_summary_markdown()</code>：将审查结果渲染为 Markdown 格式的 summary note</li>
+    <li><code>render_inline_comment()</code>：将单个 finding 渲染为 inline discussion 的内容</li>
+    <li><code>filter_findings_by_min_severity()</code>：按严重度过滤 findings</li>
+    <li><code>resolve_position()</code>：将 finding 的 file_path + line 解析为 GitLab discussion position</li>
+    <li><code>build_position_index()</code>：从 diff 构建行号索引，用于定位 inline comment</li>
+</ul>
+
+<!-- ==================== Service 业务编排 ==================== -->
+<h2 id="service">Service 业务编排</h2>
+
+<p><code>service.py</code> 是业务编排层，它协调各个组件完成完整的审查流程：</p>
+
+<h4>核心方法一览</h4>
+
+<table>
+    <tr><th>方法</th><th>职责</th></tr>
+    <tr><td><code>setup_project()</code></td><td>配置项目：验证 GitLab 项目、创建/更新 Webhook、保存配置</td></tr>
+    <tr><td><code>verify_webhook_token()</code></td><td>验证 Webhook 签名，确保请求来自 GitLab</td></tr>
+    <tr><td><code>maybe_schedule_review()</code></td><td>判断是否需要触发审查：检查事件类型、关键词、去重</td></tr>
+    <tr><td><code>_run_review_job()</code></td><td>后台执行审查任务</td></tr>
+    <tr><td><code>review_merge_request()</code></td><td>完整的审查流程：获取 MR → 克隆仓库 → 生成 diff → AI 分析 → 发布结果</td></tr>
+    <tr><td><code>_post_inline_discussions()</code></td><td>发布 inline discussions 到 GitLab MR</td></tr>
+</table>
+
+<h4>审查触发条件</h4>
+
+<p><code>maybe_schedule_review()</code> 的判断逻辑：</p>
+
+<pre><code><span class="highlight-comment"># 1. 只处理 note 事件</span>
+<span class="highlight-keyword">if</span> body.get(<span class="highlight-string">"object_kind"</span>) != <span class="highlight-string">"note"</span>:
+    <span class="highlight-keyword">return</span> {<span class="highlight-string">"scheduled"</span>: False, <span class="highlight-string">"reason"</span>: <span class="highlight-string">"unsupported_event"</span>}
+
+<span class="highlight-comment"># 2. 必须是 MR 的 note</span>
+merge_request = body.get(<span class="highlight-string">"merge_request"</span>)
+<span class="highlight-keyword">if not</span> merge_request:
+    <span class="highlight-keyword">return</span> {<span class="highlight-string">"scheduled"</span>: False, <span class="highlight-string">"reason"</span>: <span class="highlight-string">"not_merge_request_note"</span>}
+
+<span class="highlight-comment"># 3. 评论中必须包含触发关键词</span>
+note = attrs.get(<span class="highlight-string">"note"</span>) <span class="highlight-keyword">or</span> <span class="highlight-string">""</span>
+<span class="highlight-keyword">if</span> project_config.trigger_keyword <span class="highlight-keyword">not in</span> note:
+    <span class="highlight-keyword">return</span> {<span class="highlight-string">"scheduled"</span>: False, <span class="highlight-string">"reason"</span>: <span class="highlight-string">"keyword_not_found"</span>}
+
+<span class="highlight-comment"># 4. 忽略系统自动评论</span>
+<span class="highlight-keyword">if</span> attrs.get(<span class="highlight-string">"system"</span>) <span class="highlight-keyword">is</span> True:
+    <span class="highlight-keyword">return</span> {<span class="highlight-string">"scheduled"</span>: False, <span class="highlight-string">"reason"</span>: <span class="highlight-string">"system_note"</span>}
+
+<span class="highlight-comment"># 5. 去重：同一 trigger_note 不重复审查</span>
+existing_job = job_store.get_by_trigger_note(project_id, trigger_note_id)
+<span class="highlight-keyword">if</span> existing_job <span class="highlight-keyword">and</span> existing_job.status <span class="highlight-keyword">in</span> {<span class="highlight-string">"queued"</span>, <span class="highlight-string">"running"</span>, <span class="highlight-string">"completed"</span>}:
+    <span class="highlight-keyword">return</span> {<span class="highlight-string">"scheduled"</span>: False, <span class="highlight-string">"reason"</span>: <span class="highlight-string">"duplicate_trigger"</span>}</pre>
+
+<h4>Inline Discussion 发布</h4>
+
+<p><code>_post_inline_discussions()</code> 将过滤后的 findings 发布为 GitLab MR 的 inline discussion：</p>
+
+<pre><code><span class="highlight-keyword">for</span> index, finding <span class="highlight-keyword">in</span> enumerate(findings, start=1):
+    <span class="highlight-comment"># 解析位置：file_path + line → DiffLinePosition</span>
+    position = reviewer.resolve_position(
+        context.changed_files, finding.file_path, finding.line
+    )
+    <span class="highlight-keyword">if not</span> position:
+        <span class="highlight-keyword">continue</span>  <span class="highlight-comment"># 无法定位则跳过</span>
+
+    <span class="highlight-comment"># 创建 discussion</span>
+    discussion = <span class="highlight-keyword">await</span> self.gitlab.create_merge_request_discussion(
+        project_id, mr_iid,
+        reviewer.render_inline_comment(finding, context.review_language),
+        base_sha=context.target_sha,
+        start_sha=context.start_sha,
+        head_sha=context.source_sha,
+        old_path=position.old_path,
+        new_path=position.new_path,
+        new_line=position.new_line,
+    )
+    discussion_ids.append(str(discussion.get(<span class="highlight-string">"id"</span>)))</pre>
+
+<!-- ==================== GitLab API 交互 ==================== -->
+<h2 id="gitlab">GitLab API 交互</h2>
+
+<p><code>gitlab.py</code> 封装了与 GitLab REST API v4 的交互：</p>
+
+<h4>核心 API 调用</h4>
+
+<table>
+    <tr><th>方法</th><th>GitLab API</th><th>用途</th></tr>
+    <tr><td><code>get_project()</code></td><td><code>GET /projects/:id</code></td><td>获取项目信息</td></tr>
+    <tr><td><code>list_project_hooks()</code></td><td><code>GET /projects/:id/hooks</code></td><td>列出 Webhook</td></tr>
+    <tr><td><code>create_or_update_mr_webhook()</code></td><td><code>POST/PUT /projects/:id/hooks</code></td><td>创建/更新 MR Webhook</td></tr>
+    <tr><td><code>get_merge_request()</code></td><td><code>GET /projects/:id/merge_requests/:iid</code></td><td>获取 MR 详情</td></tr>
+    <tr><td><code>get_merge_request_changes()</code></td><td><code>GET /.../changes</code></td><td>获取 MR 变更文件列表</td></tr>
+    <tr><td><code>create_merge_request_note()</code></td><td><code>POST /.../notes</code></td><td>创建 MR 评论（summary）</td></tr>
+    <tr><td><code>create_merge_request_discussion()</code></td><td><code>POST /.../discussions</code></td><td>创建 inline discussion</td></tr>
+</table>
+
+<h4>Clone URL 构建</h4>
+
+<p>为了克隆仓库，需要构建带认证的 URL：</p>
+
+<pre><code><span class="highlight-keyword">def</span> <span class="highlight-function">build_clone_url</span>(self, project_http_url: str) -> str:
+    parsed = urlparse(project_http_url)
+    token = quote(settings.gitlab_token, safe=<span class="highlight-string">""</span>)
+    <span class="highlight-keyword">return</span> f<span class="highlight-string">"https://oauth2:{token}@{parsed.netloc}{parsed.path}"</span></pre>
+
+<h4>Webhook 配置</h4>
+
+<p>创建 Webhook 时只启用必要的事件：</p>
+
+<pre><code>payload = {
+    <span class="highlight-string">"url"</span>: webhook_url,
+    <span class="highlight-string">"enable_ssl_verification"</span>: True,
+    <span class="highlight-string">"token"</span>: secret,
+    <span class="highlight-string">"merge_requests_events"</span>: True,   <span class="highlight-comment"># MR 事件</span>
+    <span class="highlight-string">"note_events"</span>: True,             <span class="highlight-comment"># 评论事件</span>
+    <span class="highlight-string">"push_events"</span>: False,            <span class="highlight-comment"># 其他事件关闭</span>
+    <span class="highlight-string">"issues_events"</span>: False,
+    <span class="highlight-comment"># ...</span>
+}</pre>
+
+<!-- ==================== 数据模型 ==================== -->
+<h2 id="models">数据模型</h2>
+
+<p>所有数据模型都基于 Pydantic <code>BaseModel</code>：</p>
+
+<div class="architecture-diagram" style="text-align: left;">
+    <div style="margin-bottom: 12px;">
+        <span class="flow-box purple">ProjectSetupRequest</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">project_url · trigger_keyword? · review_language?</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <span class="flow-box blue">ProjectConfig</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">project_id · project_url · project_path · webhook_id · webhook_url · webhook_secret · trigger_keyword · review_language</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <span class="flow-box green">MergeRequestContext</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">project_id · mr_iid · mr_title · source_branch · target_branch · changed_files · unified_diff · repo_path · trigger_comment · review_language</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <span class="flow-box orange">StructuredReview</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">overall_assessment · findings[] · suggested_follow_ups[]</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <span class="flow-box red">ReviewFinding</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">title · severity(high|medium|low) · file_path? · line? · details · recommendation · suggested_code? · code_language?</span>
+    </div>
+    <div>
+        <span class="flow-box cyan">JobStatus</span><br>
+        <span style="color: var(--text-secondary); padding-left: 20px;">job_id · project_id · mr_iid · status(queued|running|completed|failed|skipped) · message · summary_note_id · inline_discussion_ids[]</span>
+    </div>
+</div>
+
+<div class="info-box">
+    <div class="info-box-title">Severity 枚举</div>
+    <p><code>Severity = Literal["high", "medium", "low"]</code> — 使用 Python 的 Literal 类型确保严重度只能是这三个值之一。在 reviewer 中，严重度还有排序：<code>{"low": 1, "medium": 2, "high": 3}</code>，用于过滤。</p>
+</div>
+
+<!-- ==================== 配置系统 ==================== -->
+<h2 id="config">配置系统</h2>
+
+<p><code>config.py</code> 使用 Pydantic Settings 管理所有配置，支持环境变量和 <code>.env</code> 文件：</p>
+
+<pre><code><span class="highlight-keyword">class</span> <span class="highlight-class">Settings</span>(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(ROOT_DIR / <span class="highlight-string">".env"</span>),
+        env_file_encoding=<span class="highlight-string">"utf-8"</span>,
+        case_sensitive=False,
+        extra=<span class="highlight-string">"ignore"</span>,
+    )
+
+    app_name: str = <span class="highlight-string">"GitLab Copilot MR Reviewer"</span>
+    app_host: str = <span class="highlight-string">"0.0.0.0"</span>
+    app_port: int = <span class="highlight-number">8001</span>
+    cors_origins: list[str] = [<span class="highlight-string">"http://localhost:5173"</span>]
+
+    gitlab_base_url: str = <span class="highlight-string">"https://gitlab.com"</span>
+    gitlab_token: str                            <span class="highlight-comment"># 必需</span>
+    public_base_url: str                         <span class="highlight-comment"># 必需，Webhook 回调地址</span>
+    review_trigger_keyword: str = <span class="highlight-string">"/copilot-review"</span>
+    default_review_language: str = <span class="highlight-string">"Chinese"</span>
+
+    copilot_model: str = <span class="highlight-string">"claude-sonnet-4"</span>
+    copilot_timeout_seconds: int = <span class="highlight-number">3600</span>
+    copilot_provider_type: str | None = None     <span class="highlight-comment"># BYOK 支持</span>
+    copilot_provider_base_url: str | None = None
+    copilot_provider_api_key: str | None = None
+
+    inline_min_severity: str = <span class="highlight-string">"medium"</span>          <span class="highlight-comment"># inline 最低严重度</span>
+    clone_root: Path = REPOS_DIR                  <span class="highlight-comment"># 仓库克隆目录</span>
+    ...</pre>
+
+<!-- ==================== 持久化存储 ==================== -->
+<h2 id="store">持久化存储</h2>
+
+<p>项目使用 JSON 文件作为轻量级持久化方案，有三个 Store：</p>
+
+<table>
+    <tr><th>Store</th><th>存储文件</th><th>内容</th></tr>
+    <tr><td><code>ProjectConfigStore</code></td><td><code>project_configs.json</code></td><td>项目配置（Webhook ID、Secret 等）</td></tr>
+    <tr><td><code>ReviewJobStore</code></td><td><code>review_jobs.json</code></td><td>审查任务状态</td></tr>
+    <tr><td><code>JobLogStore</code></td><td><code>job_logs/{job_id}.log</code></td><td>每个任务的日志文件</td></tr>
+</table>
+
+<p>所有 Store 都继承自 <code>JsonStore</code> 基类：</p>
+
+<pre><code><span class="highlight-keyword">class</span> <span class="highlight-class">JsonStore</span>:
+    <span class="highlight-keyword">def</span> <span class="highlight-function">load</span>(self):
+        payload = json.loads(self.path.read_text(encoding=<span class="highlight-string">"utf-8"</span>))
+        <span class="highlight-keyword">return</span> self.model_cls.model_validate(payload)
+
+    <span class="highlight-keyword">def</span> <span class="highlight-function">save</span>(self, state):
+        self.path.write_text(
+            json.dumps(state.model_dump(mode=<span class="highlight-string">"json"</span>),
+                       ensure_ascii=False, indent=2),
+            encoding=<span class="highlight-string">"utf-8"</span>,
+        )</pre>
+
+<div class="info-box tip">
+    <div class="info-box-title">JobLogStore 的特殊设计</div>
+    <p><code>JobLogStore</code> 使用独立的日志文件而非 JSON，支持追加写入和流式标记。它提供了 <code>start_stream()</code> / <code>end_stream()</code> / <code>append_raw()</code> 方法，用于记录 Copilot SDK 的流式输出。前端的 SSE 日志查看器就是读取这些日志文件。</p>
+</div>
+
+<!-- ==================== 前端界面 ==================== -->
+<h2 id="frontend">前端界面</h2>
+
+<p>前端是一个 React SPA，使用 Vite 构建，提供以下功能：</p>
+
+<ul>
+    <li><strong>项目配置</strong>：输入 GitLab 项目 URL，一键创建 Webhook</li>
+    <li><strong>服务状态</strong>：显示 API 地址、Webhook 端点、默认配置等</li>
+    <li><strong>已配置项目列表</strong>：展示所有已配置的项目</li>
+    <li><strong>审查任务列表</strong>：展示所有审查任务的状态和结果</li>
+    <li><strong>日志查看</strong>：通过链接打开后端的 SSE 日志流页面</li>
+    <li><strong>多语言 UI</strong>：支持中文/英文界面切换</li>
+</ul>
+
+<p>前端通过 <code>fetchJson()</code> 与后端 API 交互，每 5 秒轮询刷新数据。</p>
+
+<!-- ==================== FastAPI 路由 ==================== -->
+<h2 id="main">FastAPI 路由</h2>
+
+<p><code>main.py</code> 定义了所有 HTTP 路由：</p>
+
+<table>
+    <tr><th>路由</th><th>方法</th><th>用途</th></tr>
+    <tr><td><code>/api/health</code></td><td>GET</td><td>健康检查 &amp; 服务状态</td></tr>
+    <tr><td><code>/api/projects/setup</code></td><td>POST</td><td>配置项目 Webhook</td></tr>
+    <tr><td><code>/api/projects</code></td><td>GET</td><td>列出已配置项目</td></tr>
+    <tr><td><code>/api/review-jobs</code></td><td>GET</td><td>列出审查任务</td></tr>
+    <tr><td><code>/api/review-jobs/{id}</code></td><td>GET</td><td>获取任务详情</td></tr>
+    <tr><td><code>/api/review-jobs/{id}/logs</code></td><td>GET</td><td>获取任务日志（纯文本）</td></tr>
+    <tr><td><code>/api/review-jobs/{id}/logs/stream</code></td><td>GET</td><td>SSE 实时日志流</td></tr>
+    <tr><td><code>/api/review-jobs/{id}/logs/view</code></td><td>GET</td><td>HTML 日志查看页面</td></tr>
+    <tr><td><code>/api/webhooks/gitlab</code></td><td>POST</td><td>GitLab Webhook 接收端</td></tr>
+    <tr><td><code>/</code></td><td>GET</td><td>前端 SPA 入口</td></tr>
+</table>
+
+<h4>SSE 日志流</h4>
+
+<p>日志流使用 Server-Sent Events (SSE) 实现实时推送：</p>
+
+<pre><code><span class="highlight-keyword">async def</span> <span class="highlight-function">event_generator</span>():
+    <span class="highlight-comment"># 发送初始快照</span>
+    initial = job_log_store.read(job_id)
+    <span class="highlight-keyword">yield</span> f<span class="highlight-string">"event: snapshot\ndata: {json.dumps({'content': initial})}\n\n"</span>
+
+    <span class="highlight-keyword">while</span> True:
+        <span class="highlight-keyword">await</span> asyncio.sleep(1)
+        current = job_log_store.read(job_id)
+        <span class="highlight-keyword">if</span> current != last_sent:
+            appended = current[len(last_sent):]
+            <span class="highlight-keyword">yield</span> f<span class="highlight-string">"event: append\ndata: {json.dumps({'content': appended})}\n\n"</span>
+            last_sent = current
+
+        <span class="highlight-comment"># 任务完成时发送状态事件</span>
+        latest_job = job_store.get_by_job_id(job_id)
+        <span class="highlight-keyword">if</span> latest_job.status <span class="highlight-keyword">in</span> {<span class="highlight-string">"completed"</span>, <span class="highlight-string">"failed"</span>, <span class="highlight-string">"skipped"</span>}:
+            <span class="highlight-keyword">yield</span> f<span class="highlight-string">"event: status\ndata: ..."</span>
+            <span class="highlight-keyword">break</span>
+
+<span class="highlight-keyword">return</span> StreamingResponse(
+    event_generator(),
+    media_type=<span class="highlight-string">"text/event-stream"</span>,
+    headers={<span class="highlight-string">"Cache-Control"</span>: <span class="highlight-string">"no-cache"</span>, ...},
+)</pre>
+
+<!-- ==================== 总结 ==================== -->
+<h2 id="summary">总结与扩展</h2>
+
+<h3>项目核心设计模式</h3>
+
+<div class="step-item"><span class="step-number">1</span><span class="step-text"><strong>SDK as Agent Framework</strong>：不是简单调用 LLM API，而是利用 Copilot SDK 的完整 Agent 能力（会话、流式、权限、工具）</span></div>
+<div class="step-item"><span class="step-number">2</span><span class="step-text"><strong>Structured Output</strong>：通过精心设计的 prompt 约束 AI 返回结构化 JSON，再用 Pydantic 验证</span></div>
+<div class="step-item"><span class="step-number">3</span><span class="step-text"><strong>Streaming First</strong>：优先使用流式累积输出而非 response.content，确保结果完整性</span></div>
+<div class="step-item"><span class="step-number">4</span><span class="step-text"><strong>Severity-based Filtering</strong>：通过严重度分级控制 inline comment 的发布，避免低价值评论噪音</span></div>
+<div class="step-item"><span class="step-number">5</span><span class="step-text"><strong>Local Git Diff</strong>：克隆仓库本地生成 diff，而非依赖 GitLab API 的 diff，获得更精确的行号定位</span></div>
+
+<h3>可扩展方向</h3>
+
+<div class="info-box tip">
+    <div class="info-box-title">基于 SDK 能力的扩展思路</div>
+    <p>
+    <strong>自定义工具</strong>：注册"查询编码规范"、"运行 lint"等工具，让 AI 在审查时主动调用<br>
+    <strong>MCP 服务器</strong>：接入 MCP 协议的外部工具/数据源<br>
+    <strong>自定义 Agent</strong>：注册专门的 Security Agent、Performance Agent 等<br>
+    <strong>多轮对话</strong>：利用 infinite_sessions 实现开发者与 AI 的多轮审查讨论<br>
+    <strong>BYOK</strong>：接入自托管模型，降低成本或满足数据合规要求
+    </p>
+</div>
+
+<hr style="border-color: var(--border-color); margin: 48px 0 24px;">
+<p style="color: var(--text-secondary); text-align: center;">
+    本教程基于 <a href="https://github.com/nekoaru/copilot-code-reviewer" style="color: var(--text-link);">nekoaru/copilot-code-reviewer</a> 项目源码分析编写
+</p>
+
+</main>
+
+</body>
+</html>

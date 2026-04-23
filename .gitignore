@@ -38,3 +38,6 @@ logs/
 *.zip
 *.tar.gz
 *.7z
+
+# Output directory (contains large video files)
+output/
