@@ -37,8 +37,15 @@ def main():
     print(f"Video directory: {video_dir}")
     
     # Import VIDEO_PATH after setting paths
-    from config import VIDEO_PATH
+    from config import VIDEO_PATH, OUTPUT_PATH
     print(f"VIDEO_PATH: {VIDEO_PATH}")
+    
+    # Check if the video has already been fully processed (video + summary exist)
+    if os.path.exists(VIDEO_PATH) and os.path.exists(OUTPUT_PATH):
+        print(f"Video already processed: {VIDEO_PATH}")
+        print(f"Summary already exists: {OUTPUT_PATH}")
+        print("Skipping download and processing. Use --force to reprocess.")
+        return
     
     # Step 1.6: Move video to the video-specific directory
     if args.url:

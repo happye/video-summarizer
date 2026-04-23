@@ -19,10 +19,39 @@ def download_video(url):
         [yt_dlp_path, "--no-playlist", "--get-title", url],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True
+        text=True,
+        encoding='utf-8'
     )
     video_title = title_process.stdout.read().strip()
     title_process.wait()
+    
+    # Check if title is empty or contains errors
+    if not video_title or "ERROR" in video_title or "Error" in video_title:
+        print(f"Warning: Failed to get video title, using URL-based title")
+        # Extract video ID from URL as fallback
+        import re
+        video_id_match = re.search(r'BV([a-zA-Z0-9]+)', url)
+        if video_id_match:
+            video_title = f"video_{video_id_match.group(1)}"
+        else:
+            video_title = "video_download"
+    
+    # Clean up video title to remove invalid characters for filename
+    import re
+    video_title_clean = re.sub(r'[<>:"/\\|?*]', '_', video_title)
+    video_title_clean = video_title_clean.strip('_')
+    video_title_clean = video_title_clean[:100]  # Limit length
+    
+    # Check if video already exists in output directory
+    output_dir = os.path.join(BASE_DIR, video_title_clean)
+    if os.path.exists(output_dir):
+        # Look for video files in the output directory
+        import glob
+        video_files = glob.glob(os.path.join(output_dir, "*.mp4")) + glob.glob(os.path.join(output_dir, "*.mkv")) + glob.glob(os.path.join(output_dir, "*.webm"))
+        if video_files:
+            print(f"Video already exists in output directory: {video_files[0]}")
+            print("Skipping download, using existing file...")
+            return video_files[0], video_title_clean
     
     # Build command arguments
     args = [yt_dlp_path]
@@ -36,8 +65,9 @@ def download_video(url):
         args.extend(["--cookies", cookies_path])
     
     # Add output format and URL
+    # Use --no-restrict-filenames to preserve Unicode characters (Chinese, etc.)
     temp_output = f"temp/%(title)s.%(ext)s"
-    args.extend(["-o", temp_output, "--no-playlist", url])
+    args.extend(["-o", temp_output, "--no-playlist", "--no-restrict-filenames", url])
     
     # Run yt-dlp with live output
     print(f"Running: {' '.join(args)}")
@@ -99,6 +129,6 @@ def download_video(url):
     video_files.sort(key=os.path.getmtime, reverse=True)
     temp_video_path = video_files[0]
     
-    # Return video path and title
+    # Return video path and cleaned title (for consistent path naming)
     print(f"Download completed successfully! Video saved as: {temp_video_path}")
-    return temp_video_path, video_title
+    return temp_video_path, video_title_clean

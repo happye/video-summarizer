@@ -19,7 +19,8 @@ def download_video(url):
         [yt_dlp_path, "--no-playlist", "--get-title", url],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True
+        text=True,
+        encoding='utf-8'
     )
     video_title = title_process.stdout.read().strip()
     title_process.wait()
@@ -50,7 +51,7 @@ def download_video(url):
         if video_files:
             print(f"Video already exists in output directory: {video_files[0]}")
             print("Skipping download, using existing file...")
-            return video_files[0], video_title
+            return video_files[0], video_title_clean
     
     # Build command arguments
     args = [yt_dlp_path]
@@ -64,8 +65,9 @@ def download_video(url):
         args.extend(["--cookies", cookies_path])
     
     # Add output format and URL
+    # Use --no-restrict-filenames to preserve Unicode characters (Chinese, etc.)
     temp_output = f"temp/%(title)s.%(ext)s"
-    args.extend(["-o", temp_output, "--no-playlist", url])
+    args.extend(["-o", temp_output, "--no-playlist", "--no-restrict-filenames", url])
     
     # Run yt-dlp with live output
     print(f"Running: {' '.join(args)}")
@@ -127,6 +129,6 @@ def download_video(url):
     video_files.sort(key=os.path.getmtime, reverse=True)
     temp_video_path = video_files[0]
     
-    # Return video path and title
+    # Return video path and cleaned title (for consistent path naming)
     print(f"Download completed successfully! Video saved as: {temp_video_path}")
-    return temp_video_path, video_title
+    return temp_video_path, video_title_clean
