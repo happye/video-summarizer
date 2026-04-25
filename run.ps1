@@ -81,16 +81,16 @@ try {
     $configContent = Get-Content -Path "config.py" -Raw
 
     if ($llmProvider -eq "kimi") {
-        if ($configContent -match "KIMI_API_KEY\s*=\s*['\"]\s*['\"]|KIMI_API_KEY\s*=\s*['\"]sk-.*['\"]") {
-            if ($configContent -match "KIMI_API_KEY\s*=\s*['\"]\s*['\"]") {
-                Write-Host "Warning: KIMI_API_KEY is empty. Please edit config.py and enter your Kimi API key."
-                Read-Host "Press any key to continue, or Ctrl+C to exit..."
-            } else {
-                Write-Host "Kimi API key configured."
-            }
+        # Check if KIMI_API_KEY is empty (equals empty string)
+        if ($configContent -match 'KIMI_API_KEY\s*=\s*["\x27]\s*["\x27]') {
+            Write-Host "Warning: KIMI_API_KEY is empty. Please edit config.py and enter your Kimi API key."
+            Read-Host "Press any key to continue, or Ctrl+C to exit..."
+        } else {
+            Write-Host "Kimi API key configured."
         }
     } elseif ($llmProvider -eq "deepseek") {
-        if ($configContent -match "DEEPSEEK_API_KEY\s*=\s*['\"]\s*['\"]") {
+        # Check if DEEPSEEK_API_KEY is empty (equals empty string)
+        if ($configContent -match 'DEEPSEEK_API_KEY\s*=\s*["\x27]\s*["\x27]') {
             Write-Host "Warning: DEEPSEEK_API_KEY is empty. Please edit config.py and enter your DeepSeek API key."
             Write-Host "Get your API key from: https://platform.deepseek.com/"
             Read-Host "Press any key to continue, or Ctrl+C to exit..."
