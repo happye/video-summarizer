@@ -6,11 +6,11 @@ class DeepSeekClient(BaseLLMClient):
 
     Official API Docs: https://api-docs.deepseek.com/api/create-chat-completion/
     Base URL: https://api.deepseek.com/chat/completions
-    Models: deepseek-v4-pro, deepseek-chat
-    Context Length: 64K tokens
+    Models: deepseek-v4-pro, deepseek-v4-flash
+    Context Length: 384K tokens (v4 series)
     """
 
-    def __init__(self, max_context_messages=30, max_tokens_per_request=60000):
+    def __init__(self, max_context_messages=100, max_tokens_per_request=350000):
         super().__init__(
             api_key=DEEPSEEK_API_KEY,
             model="deepseek-v4-pro",
@@ -18,7 +18,7 @@ class DeepSeekClient(BaseLLMClient):
             max_context_messages=max_context_messages,
             max_tokens_per_request=max_tokens_per_request,
             max_retries=5,
-            timeout=180,
+            timeout=300,
             retry_delay=5
         )
 
