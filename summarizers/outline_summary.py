@@ -1,31 +1,37 @@
 from llm.adapter import LLMAdapter
 from llm.kimi_client import KimiClient
+from llm.deepseek_client import DeepSeekClient
 import time
 from datetime import datetime
 
 def outline_summary(chunks, llm_provider, detail_level, bullet_count):
     """Generate outline summary with chunked processing and context management"""
-    
+
     overall_start = time.time()
     print(f"[PERF] Starting outline summary generation at {datetime.now().isoformat()}")
     print(f"[PERF] Total chunks to process: {len(chunks)}")
-    
-    # 使用KimiClient来保持上下文连续性
+
+    # 根据提供者创建对应的客户端（都支持上下文管理）
     if llm_provider == "kimi":
         client = KimiClient()
-        # 重置上下文，开始新的会话
-        client.generate("你是一名资深的金融/经济/投资专家，拥有丰富的市场分析经验和专业知识。你擅长将复杂的投资概念解释清楚，并且能够提供深入、有洞察力的分析。我将为你提供投资相关视频的转录文本分段，希望你能以朋友般的专业顾问身份，为我生成一个全面、深入、有条理的分析报告。请直接改正转录文本中的错别字，不要标注，确保输出的内容专业、准确、有深度，同时语言自然、流畅、拟人化。", reset_context=True)
+    elif llm_provider == "deepseek":
+        client = DeepSeekClient()
     else:
+        client = None
         adapter = LLMAdapter(llm_provider)
-    
+
+    # 如果有状态化客户端，设置系统提示
+    if client:
+        client.generate("你是一名资深的金融/经济/投资专家，拥有丰富的市场分析经验和专业知识。你擅长将复杂的投资概念解释清楚，并且能够提供深入、有洞察力的分析。我将为你提供投资相关视频的转录文本分段，希望你能以朋友般的专业顾问身份，为我生成一个全面、深入、有条理的分析报告。请直接改正转录文本中的错别字，不要标注，确保输出的内容专业、准确、有深度，同时语言自然、流畅、拟人化。", reset_context=True)
+
     # 分块处理逻辑
     if len(chunks) > 1:
         print(f"Processing {len(chunks)} chunks for outline summary...")
-        
+
         # 先对每个块生成局部摘要
         partial_summaries = []
         chunk_times = []
-        
+
         for i, chunk in enumerate(chunks):
             chunk_start = time.time()
             print(f"[PERF] Processing chunk {i+1}/{len(chunks)}...")
@@ -43,18 +49,18 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 {chunk}
 
 请以朋友般的专业顾问身份，为我提供一个结构清晰、信息准确的分析总结，语言自然流畅，同时体现你作为投资专家的专业视角："""
-            
-            if llm_provider == "kimi":
+
+            if client:
                 partial_summary = client.generate(chunk_prompt)
             else:
                 partial_summary = adapter.generate(chunk_prompt)
-            
+
             partial_summaries.append(partial_summary)
-            
+
             chunk_duration = time.time() - chunk_start
             chunk_times.append(chunk_duration)
             print(f"[PERF] Chunk {i+1} completed in {chunk_duration:.2f}s")
-            
+
             # 智能等待策略：根据前面的处理时间动态调整
             if i < len(chunks) - 1:
                 # 计算平均处理时间
@@ -63,7 +69,7 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
                 wait_time = min(max(avg_time * 0.1, 1), 5)  # 最小1秒，最大5秒
                 print(f"[PERF] Average chunk time: {avg_time:.2f}s, waiting {wait_time:.2f}s before next chunk...")
                 time.sleep(wait_time)
-        
+
         # 然后将局部摘要组合成最终大纲
         combined_summaries = "\n".join(partial_summaries)
         final_prompt = f"""作为我的投资顾问，基于你已经处理过的所有局部摘要，为我创建一个结构化的投资分析大纲。
@@ -85,8 +91,8 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 不要添加外部知识，不要进行推测，所有内容都必须基于转录文本。
 
 请以朋友般的专业顾问身份，为我生成一个高质量的投资分析大纲，语言自然流畅，直接改正错别字："""
-        
-        if llm_provider == "kimi":
+
+        if client:
             summary = client.generate(final_prompt)
         else:
             summary = adapter.generate(final_prompt)
@@ -124,27 +130,27 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 {combined_text}
 
 请以朋友般的专业顾问身份，为我生成一个高质量的投资分析大纲，语言自然流畅，直接改正错别字："""
-        
-        if llm_provider == "kimi":
+
+        if client:
             summary = client.generate(prompt, reset_context=True)
         else:
             summary = adapter.generate(prompt)
-    
+
     # 输出性能总结
     overall_duration = time.time() - overall_start
     print(f"\n[PERF] ========== Performance Summary ==========")
     print(f"[PERF] Total processing time: {overall_duration:.2f}s")
     print(f"[PERF] Number of chunks: {len(chunks)}")
-    
+
     if len(chunks) > 1 and chunk_times:
         avg_chunk_time = sum(chunk_times) / len(chunk_times)
         print(f"[PERF] Average chunk processing time: {avg_chunk_time:.2f}s")
         print(f"[PERF] Fastest chunk: {min(chunk_times):.2f}s")
         print(f"[PERF] Slowest chunk: {max(chunk_times):.2f}s")
-    
-    if llm_provider == "kimi":
+
+    if client:
         print(client.get_performance_summary())
-    
+
     print(f"[PERF] ===========================================\n")
-    
+
     return summary

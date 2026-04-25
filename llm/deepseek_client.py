@@ -1,32 +1,39 @@
-import requests
+from llm.base_client import BaseLLMClient
 from config import DEEPSEEK_API_KEY
 
+class DeepSeekClient(BaseLLMClient):
+    """DeepSeek API Client
+
+    Official API Docs: https://api-docs.deepseek.com/api/create-chat-completion/
+    Base URL: https://api.deepseek.com/chat/completions
+    Models: deepseek-v4-pro, deepseek-chat
+    Context Length: 64K tokens
+    """
+
+    def __init__(self, max_context_messages=30, max_tokens_per_request=60000):
+        super().__init__(
+            api_key=DEEPSEEK_API_KEY,
+            model="deepseek-v4-pro",
+            api_url="https://api.deepseek.com/chat/completions",
+            max_context_messages=max_context_messages,
+            max_tokens_per_request=max_tokens_per_request,
+            max_retries=5,
+            timeout=180,
+            retry_delay=5
+        )
+
+    def _build_request_data(self):
+        """DeepSeek 特定的请求体构建"""
+        return {
+            "model": self.model,
+            "messages": self.messages,
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "stream": False
+        }
+
+
 def deepseek_generate(prompt):
-    """Generate text using DeepSeek API"""
-    if not DEEPSEEK_API_KEY:
-        raise ValueError("DeepSeek API key is not set in config.py")
-    
-    try:
-        url = "https://api.deepseek.com/v1/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
-        }
-        data = {
-            "model": "deepseek-chat",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.7
-        }
-        
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
-        
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
-    except Exception as e:
-        raise Exception(f"Error generating text with DeepSeek: {str(e)}")
+    """Backward compatibility function"""
+    client = DeepSeekClient()
+    return client.generate(prompt, reset_context=True)
