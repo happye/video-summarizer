@@ -3,6 +3,8 @@ from llm.kimi_client import KimiClient
 from llm.deepseek_client import DeepSeekClient
 import time
 from datetime import datetime
+import os
+import json
 
 def outline_summary(chunks, llm_provider, detail_level, bullet_count):
     """Generate outline summary with chunked processing and context management"""
@@ -72,6 +74,19 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 
         # 然后将局部摘要组合成最终大纲
         combined_summaries = "\n".join(partial_summaries)
+
+        # 保存中间结果，防止最终生成失败导致全部丢失
+        try:
+            from config import PARTIAL_SUMMARY_PATH
+            partial_summary_dir = os.path.dirname(PARTIAL_SUMMARY_PATH)
+            if not os.path.exists(partial_summary_dir):
+                os.makedirs(partial_summary_dir, exist_ok=True)
+            with open(PARTIAL_SUMMARY_PATH, "w", encoding="utf-8") as f:
+                json.dump({"partial_summaries": partial_summaries, "combined": combined_summaries}, f, ensure_ascii=False, indent=2)
+            print(f"[PERF] Partial summaries saved to {PARTIAL_SUMMARY_PATH}")
+        except Exception as e:
+            print(f"[PERF] Warning: Failed to save partial summaries: {e}")
+
         final_prompt = f"""作为我的投资顾问，基于你已经处理过的所有局部摘要，为我创建一个结构化的投资分析大纲。
 
 大纲要求：
@@ -92,10 +107,16 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 
 请以朋友般的专业顾问身份，为我生成一个高质量的投资分析大纲，语言自然流畅，直接改正错别字："""
 
-        if client:
-            summary = client.generate(final_prompt)
-        else:
-            summary = adapter.generate(final_prompt)
+        try:
+            if client:
+                summary = client.generate(final_prompt)
+            else:
+                summary = adapter.generate(final_prompt)
+        except Exception as e:
+            print(f"\n[PERF] ERROR: Final summary generation failed: {e}")
+            print("[PERF] Returning combined partial summaries as fallback...")
+            # 返回已生成的局部摘要组合，避免全部丢失
+            summary = f"# 投资分析大纲（部分生成）\n\n> 注意：最终整合阶段出错，以下为各片段分析的汇总\n\n{combined_summaries}"
     else:
         # 如果只有一个块，直接处理
         combined_text = "\n".join(chunks)

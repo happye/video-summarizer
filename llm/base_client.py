@@ -77,8 +77,10 @@ class BaseLLMClient:
     def _estimate_tokens(self, text):
         """估算文本的token数量（粗略估计：中文约1.5字符/token，英文约0.25词/token）"""
         chinese_chars = sum(1 for char in text if '\u4e00' <= char <= '\u9fff')
-        english_words = len(text.split()) - chinese_chars
-        return int(chinese_chars / 1.5 + english_words / 0.25)
+        # 英文词数 = 总词数 - 中文词（每个中文字符被split算作一个词）
+        total_words = len(text.split())
+        english_words = max(0, total_words - chinese_chars)
+        return max(1, int(chinese_chars / 1.5 + english_words / 0.25))
 
     def _estimate_request_tokens(self):
         """估算当前请求的总token数"""
