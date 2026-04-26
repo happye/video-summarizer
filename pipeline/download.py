@@ -15,10 +15,14 @@ def download_video(url):
         raise FileNotFoundError(f"yt-dlp executable not found at {yt_dlp_path}")
     
     # Get video title without downloading
-    # Note: Do NOT specify encoding here. Let Python use the system default
-    # encoding (gbk/cp936 on Chinese Windows) to correctly decode Chinese titles.
+    # Must use cookies for Bilibili to avoid 412 error
+    title_args = [yt_dlp_path, "--no-playlist", "--get-title"]
+    if os.path.exists(cookies_path):
+        title_args.extend(["--cookies", cookies_path])
+    title_args.append(url)
+
     title_process = subprocess.Popen(
-        [yt_dlp_path, "--no-playlist", "--get-title", url],
+        title_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True
