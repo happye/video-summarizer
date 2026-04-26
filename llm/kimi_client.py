@@ -4,7 +4,7 @@ from config import KIMI_API_KEY
 class KimiClient(BaseLLMClient):
     """Kimi (Moonshot AI) Client"""
 
-    def __init__(self, max_context_messages=30, max_tokens_per_request=80000):
+    def __init__(self, max_context_messages=200, max_tokens_per_request=194000):
         super().__init__(
             api_key=KIMI_API_KEY,
             model="kimi-k2.6",

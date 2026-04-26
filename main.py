@@ -83,8 +83,8 @@ def main():
     # Step 2: Transcribe video
     transcript_path = transcribe_video(video_path)
     
-    # Step 3: Chunk transcript
-    chunks = chunk_transcript(transcript_path)
+    # Step 3: Chunk transcript (pass llm_provider to optimize chunk size)
+    chunks = chunk_transcript(transcript_path, llm_provider=args.llm)
     
     # Step 4: Generate summary
     summary = generate_summary(chunks, args.llm, args.mode, args.detail_level, args.bullet_count)
