@@ -7,10 +7,10 @@ import os
 # 预留 6000 tokens 给 prompt + response
 MODEL_CHUNK_LIMITS = {
     "kimi": {
-        "context_tokens": 200000,
-        "usable_tokens": 194000,  # 200K - 6K reserve
-        "chars_per_token": 1.5,   # 中文约 1.5 字符/token
-        "max_chars": 130000       # 194K / 1.5 ≈ 129K, 取整
+        "context_tokens": 262144,  # Kimi K2.5/K2.6 官方上下文: 256K tokens
+        "usable_tokens": 256000,   # 262K - 6K reserve
+        "chars_per_token": 1.5,    # 中文约 1.5 字符/token
+        "max_chars": 170000        # 256K / 1.5 ≈ 170K, 取整
     },
     "deepseek": {
         "context_tokens": 384000,
