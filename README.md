@@ -12,8 +12,12 @@
 - **支持多种LLM提供商**：Kimi (Moonshot AI)、DeepSeek、Ollama
 - 按视频名称分类的目录结构
 - 支持多种总结模式（大纲、时间线、MapReduce）
-- **智能跳过已处理视频**，避免重复下载和API调用
-- **中文文件名保留**，不乱码
+- **交互模式**：处理完不退出，连续处理多个视频
+- **本地视频目录**：直接处理已下载的视频，跳过下载步骤
+- **AI缓存命中日志**：前台+本地文件双记录，追踪API缓存效率
+- **费曼学习法提示词**：专业术语通俗解释、原话引用、举例说明
+- 智能跳过已处理视频，避免重复下载和API调用
+- 中文文件名保留，不乱码
 
 ## 系统要求
 
@@ -65,179 +69,189 @@ DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 
 系统会自动下载并配置yt-dlp，用于视频下载。
 
-### 5. 依赖版本管理
-
-为确保系统稳定性，我们提供了详细的依赖版本记录。如果遇到环境问题，可以使用以下命令安装特定版本的依赖：
-
-```bash
-pip install -r dependencies.txt
-```
-
-`dependencies.txt`文件包含了所有依赖的详细版本信息，确保系统在不同环境中都能正常运行。
-
 ## 使用方法
 
-### 方式一：使用启动脚本（推荐）
+### 方式一：交互模式（推荐）
 
-双击运行 `run.ps1`，按提示选择：
-
-1. **选择LLM提供商**：输入 1 (Kimi)、2 (DeepSeek) 或 3 (Ollama)
-2. **选择总结模式**：输入 1 (Outline)、2 (Timeline) 或 3 (MapReduce)
-3. **输入视频URL**：直接粘贴URL，或按回车使用默认测试视频
+双击运行 `run.ps1`，选择交互模式，可连续处理多个视频：
 
 ```powershell
-# PowerShell 中运行
 .\run.ps1
 ```
+
+交互模式支持以下命令：
+
+| 命令 | 说明 |
+|------|------|
+| `url <视频链接>` | 从URL下载并处理 |
+| `local <目录路径>` | 处理本地视频目录 |
+| `file <文件路径>` | 处理本地视频文件 |
+| `llm <kimi/deepseek/ollama>` | 切换LLM模型 |
+| `mode <outline/timeline/mapreduce>` | 切换摘要模式 |
+| `force` | 切换强制重处理 |
+| `help` | 显示帮助 |
+| `exit` / `quit` / `q` | 退出 |
+
+直接粘贴URL或路径也可自动识别。
 
 ### 方式二：命令行直接运行
 
 #### 命令行参数
 
-- `--url`：视频URL（支持YouTube、Bilibili等）
-- `--file`：本地视频文件路径
-- `--llm`：LLM提供商（`kimi`、`deepseek`、`ollama`，默认`kimi`）
-- `--mode`：总结模式（`outline`、`timeline`、`mapreduce`，默认`outline`）
-- `--detail-level`：总结详细程度（1-5，默认2）
-- `--bullet-count`：要点数量（默认10）
+| 参数 | 说明 |
+|------|------|
+| `--url` | 视频URL（支持YouTube、Bilibili等） |
+| `--file` | 本地视频文件路径 |
+| `--local` | 本地视频目录路径（跳过下载，直接处理） |
+| `--llm` | LLM提供商（`kimi`、`deepseek`、`ollama`，默认`kimi`） |
+| `--mode` | 总结模式（`outline`、`timeline`、`mapreduce`，默认`outline`） |
+| `--detail-level` | 总结详细程度（1-5，默认2） |
+| `--bullet-count` | 要点数量（默认10） |
+| `--force` | 强制重新处理已存在的视频 |
+| `--interactive` / `-i` | 交互模式 |
 
 #### 示例命令
 
-**使用 Kimi 处理在线视频（默认）**
 ```bash
+# 交互模式（无参数自动进入）
+python main.py
+
+# 从URL下载并处理
 python main.py --url "https://www.bilibili.com/video/BV1bpQeY2EvH"
-```
 
-**使用 DeepSeek 处理在线视频**
-```bash
-python main.py --url "https://www.bilibili.com/video/BV1bpQeY2EvH" --llm deepseek
-```
+# 使用DeepSeek处理
+python main.py --url "视频URL" --llm deepseek
 
-**使用 Kimi 处理本地视频**
-```bash
+# 处理本地视频目录
+python main.py --local "D:\Videos\我的视频" --llm deepseek
+
+# 处理本地视频文件
 python main.py --file "path/to/video.mp4" --llm kimi --mode outline
-```
 
-**使用 DeepSeek 生成时间线总结**
-```bash
+# 生成时间线总结
 python main.py --url "视频URL" --llm deepseek --mode timeline
 ```
 
 ### 方式三：API连通性测试
 
-测试各模型API是否配置正确：
-
 ```bash
-# 测试 Kimi
 python test_kimi.py
-
-# 测试 DeepSeek
 python test_deepseek.py
 ```
 
+## 总结模式对比
+
+| 模式 | 输出格式 | 适用场景 | 深度 |
+|------|---------|---------|------|
+| **Outline（大纲）** | `I. → A. → 1.` 层次编号 | 知识讲座、投资分析、教程等有逻辑结构的视频 | ⭐⭐⭐⭐⭐ 最深 |
+| **Timeline（时间线）** | `MM:SS 事件描述` | 直播回放、会议记录等需按时间定位的视频 | ⭐⭐⭐ 中等 |
+| **MapReduce（分治）** | 要点式综合摘要 | 超长视频+Ollama本地模型 | ⭐⭐⭐ 中等 |
+
+**推荐**：日常用 Outline，需定位时间点用 Timeline，Ollama处理超长视频用 MapReduce。
+
 ## 输出结果
 
-处理完成后，系统会在 `output` 目录下创建以视频名称命名的文件夹，包含以下文件：
+### URL模式
 
-- `<视频名称>.mp4`：下载或复制的视频文件
+处理完成后，系统会在 `output` 目录下创建以视频名称命名的文件夹：
+
+- `<视频名称>.mp4`：下载的视频文件
 - `transcript.json`：完整的语音转录结果
 - `chunks.json`：文本分段结果
-- `partial_summary.json`：部分总结结果（用于调试）
-- `summary.md`：最终的视频总结（Markdown格式）
+- `partial_summary.json`：部分总结结果（调试用）
+- `summary.md`：最终的视频总结
+
+### 本地目录模式（--local）
+
+所有输出直接写入传入的目录，不复制视频文件：
+
+- `transcript.json`、`chunks.json`、`summary.md` 等
+
+## AI缓存命中日志
+
+系统自动记录API缓存命中情况，前台输出+本地文件双记录：
+
+- 日志文件：`logs/ai_cache.log`
+- 支持的缓存字段：
+  - DeepSeek：`prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+  - Kimi K2.x：`cached_tokens` / `prompt_tokens_details.cached_tokens`
+- 每次请求显示：CACHE HIT / CACHE PARTIAL / CACHE MISS
+- 会话结束时输出缓存统计摘要
 
 ## 智能跳过机制
 
-如果 `output/<视频名称>/` 目录下已经存在：
-- 视频文件（`.mp4`）
-- 总结文件（`summary.md`）
-
-系统会自动跳过下载和处理，直接输出提示信息。这避免了：
-- 重复下载相同视频
-- 重复调用API产生额外费用
-- 重复生成相同内容
-
-如需重新处理，请删除对应的 `output/<视频名称>/` 文件夹。
+- 如果 `output/<视频名称>/` 已存在视频和总结文件，自动跳过
+- 使用 `--force` 参数强制重新处理
+- 交互模式下用 `force` 命令切换
 
 ## 常见问题
 
-### 1. GPU加速问题
+### GPU加速问题
 
-如果系统没有使用GPU，请检查：
-- 已安装CUDA兼容的PyTorch
-- GPU驱动已正确安装
-- 系统支持CUDA
+确保已安装CUDA兼容的PyTorch，GPU驱动正确。
 
-### 2. API超时问题
+### API超时
 
-系统已实现自动重试机制：
-- 超时：最多重试5次，动态增加等待时间
-- 限流(429)：指数退避重试
-- 代理错误：快速失败，提示检查代理设置
+系统已实现自动重试机制（最多5次，指数退避），代理错误快速失败。
 
-### 3. 视频下载失败
+### 视频下载失败
 
-请确保网络连接稳定，并且视频URL格式正确。系统支持大多数主流视频平台。
+- 确保网络连接稳定
+- Bilibili视频需要cookies（系统已自动配置）
+- BV号大小写敏感，直接粘贴URL即可，不要手动修改
 
-### 4. 中文文件名乱码
+### 中文文件名乱码
 
-已修复。系统现在会：
-- 正确读取中文视频标题
-- 保留中文字符在文件名中
-- 自动替换Windows非法字符（`:`、`|`、`?`、`*`等）
+已修复，系统会正确读取中文标题并保留中文字符。
 
-### 5. 长视频处理中断
+### 长视频处理
 
-对于超长视频（20+ chunk），系统会自动：
-- 估算上下文token数
-- 超过限制时压缩历史消息为摘要
-- 保留最近的消息和系统提示
+系统自动估算上下文token，超限时压缩历史消息，DeepSeek 384K上下文可处理超长视频。
 
 ## 故障排除
 
-- **错误：FileNotFoundError**：检查文件路径是否正确，确保文件存在
-- **错误：APIError**：检查API密钥是否正确，网络连接是否稳定
-- **错误：CUDA out of memory**：尝试使用更小的视频或降低模型大小
-- **错误：ProxyError**：请求可能过大，或代理设置有问题，尝试减少上下文大小
-
-## 性能优化
-
-- 使用GPU加速可以显著提高转录速度
-- 对于长视频，建议使用MapReduce模式进行总结
-- 调整 `CHUNK_SIZE` 和 `CHUNK_OVERLAP` 参数可以优化分段效果
-- **DeepSeek v4** 支持 384K 上下文，可以处理更长的视频而无需频繁分段
+| 错误 | 解决方案 |
+|------|---------|
+| FileNotFoundError | 检查文件路径是否正确 |
+| APIError | 检查API密钥和网络连接 |
+| CUDA out of memory | 使用更小的Whisper模型 |
+| ProxyError | 减少上下文大小或检查代理设置 |
+| Bilibili "deleted or geo-restricted" | 确认URL中BV号大小写正确 |
 
 ## 项目结构
 
 ```
 video-summarizer/
-├── main.py                      # 主入口
+├── main.py                      # 主入口（交互模式+单次模式）
 ├── config.py                    # 配置文件（API密钥等）
-├── run.ps1                      # 启动脚本
+├── run.ps1                      # 启动脚本（交互/单次双模式）
 ├── CHANGELOG.md                 # 版本记录
 ├── README.md                    # 使用文档
 ├── requirements.txt             # Python依赖
 ├── llm/                         # LLM客户端
-│   ├── base_client.py           # 通用基类（上下文管理、重试）
+│   ├── base_client.py           # 通用基类（上下文管理、重试、缓存日志）
 │   ├── kimi_client.py           # Kimi客户端
 │   ├── deepseek_client.py       # DeepSeek客户端
 │   ├── ollama_client.py         # Ollama客户端
 │   └── adapter.py               # 适配器
 ├── pipeline/                    # 处理流程
-│   ├── download.py              # 视频下载
-│   ├── transcribe.py            # 语音转录
-│   ├── chunker.py               # 文本分段
-│   ├── summarize.py             # 总结调度
+│   ├── download.py              # 视频下载（URL清理、cookies）
+│   ├── transcribe.py            # 语音转录（Whisper medium）
+│   ├── chunker.py               # 文本分段（模型自适应大小）
+│   ├── summarize.py             # 总结调度（含缓存统计）
 │   └── output.py                # 输出处理
 ├── summarizers/                 # 总结策略
-│   ├── outline_summary.py       # 大纲模式
+│   ├── outline_summary.py       # 大纲模式（费曼学习法提示词）
 │   ├── timeline_summary.py      # 时间线模式
 │   └── map_reduce.py            # MapReduce模式
+├── utils/                       # 工具模块
+│   └── ai_logger.py             # AI缓存命中日志
 └── output/                      # 输出目录
 ```
 
 ## 版本信息
 
-当前版本：**v1.2.0** (2026-04-24)
+当前版本：**v1.3.0** (2026-05-09)
 
 查看完整版本记录：[CHANGELOG.md](CHANGELOG.md)
 

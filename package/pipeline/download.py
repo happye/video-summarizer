@@ -4,6 +4,9 @@ from config import BASE_DIR
 
 def download_video(url):
     """Download video from URL (supports YouTube, Bilibili, etc.) using yt-dlp"""
+    # 清理 URL：去除首尾反引号、引号、空格
+    url = url.strip().strip('`').strip('"').strip("'").strip()
+    
     print(f"Downloading video from {url}...")
     
     # Use the local yt-dlp executable directly
@@ -112,8 +115,12 @@ def download_video(url):
     if process.returncode != 0:
         # If download fails, show available formats for debugging
         print("\nShowing available formats for debugging:")
+        debug_args = [yt_dlp_path, "--no-playlist", "--list-formats"]
+        if os.path.exists(cookies_path):
+            debug_args.extend(["--cookies", cookies_path])
+        debug_args.append(url)
         formats_process = subprocess.Popen(
-            [yt_dlp_path, "--no-playlist", "--list-formats", url],
+            debug_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True

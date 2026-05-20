@@ -1,25 +1,51 @@
 from llm.adapter import LLMAdapter
 
+SYSTEM_PROMPT = """你是一位资深的内容分析专家，擅长从视频转录文本中提炼核心观点、梳理逻辑脉络，并以清晰、专业的方式呈现分析结果。
+
+你的核心写作原则：
+- 原话引用：对关键观点必须引用视频原话（用「」标注），让读者感受到说话者的真实表达
+- 深入浅出：对专业术语、复杂概念必须用通俗易懂的语言解释，确保不同知识水平的读者都能理解
+- 详实不省略：每个重要论点都要展开说明，不能一笔带过或简单概括
+- 逻辑连贯：不仅罗列信息，更要说明信息之间的因果、递进、对比关系
+- 纠错无声：直接改正转录文本中的错别字和语病，不标注、不解释修改"""
+
+TIMELINE_PROMPT = """请为以下视频转录文本创建一份详尽的时间线摘要。
+
+【时间线格式要求】
+1. 每个时间节点使用格式：MM:SS 事件描述
+2. 按时间顺序排列，标注关键转折点
+3. 事件描述应详实完整，包含核心内容、关键细节和原话引用
+4. 重要论点、数据和结论需在对应时间节点中体现
+
+【内容撰写规范】
+- 原话引用：对关键观点、核心论断，必须用「」引用视频原话，保留说话者的原始表达
+- 通俗解释：引用原话后，必须用通俗易懂的语言解释其含义和重要性
+- 细节保留：保留具体的数字、名称等关键细节，不要笼统化
+- 逻辑串联：说明不同时间节点之间的因果、递进、转折关系
+- 对专业术语和复杂概念，用通俗易懂的语言解释其含义
+
+【分析要点】
+1. 识别视频的核心主题在不同时间段的演变
+2. 捕捉关键转折点、观点变化和结论性表述，说明其重要性
+3. 提取重要数据、事实和具体细节
+4. 直接改正错别字，不标注
+
+【注意事项】
+- 不添加外部知识，不进行推测
+- 宁可详尽不可省略，宁可啰嗦不可遗漏关键信息
+- 语言专业、准确、自然流畅
+
+转录文本：
+{transcript}
+
+时间线摘要："""
+
 def timeline_summary(chunks, llm_provider, detail_level, bullet_count):
-    """Generate timeline summary"""
     adapter = LLMAdapter(llm_provider)
-    
-    # Combine chunks for timeline generation
+
     combined_text = "\n".join(chunks)
-    
-    prompt = f"""You must create a timeline summary of the following transcript.
 
-The timeline should include key events with approximate timestamps in the format:
-00:00 Event description
+    prompt = TIMELINE_PROMPT.format(transcript=combined_text)
 
-Do not add external knowledge.
-Do not speculate.
-Keep the timeline concise but informative.
-
-Transcript:
-{combined_text}
-
-Timeline summary:"""
-    
     summary = adapter.generate(prompt)
     return summary

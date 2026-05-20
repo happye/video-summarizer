@@ -7,39 +7,33 @@ import os
 import json
 
 def estimate_tokens(text):
-    """快速估算 token 数"""
     chinese_chars = sum(1 for char in text if '\u4e00' <= char <= '\u9fff')
     total_words = len(text.split())
     english_words = max(0, total_words - chinese_chars)
     return max(1, int(chinese_chars / 1.5 + english_words / 0.25))
 
 def outline_summary(chunks, llm_provider, detail_level, bullet_count):
-    """Generate outline summary with chunked processing and context management"""
-
     overall_start = time.time()
     print(f"[PERF] Starting outline summary generation at {datetime.now().isoformat()}")
     print(f"[PERF] Total chunks to process: {len(chunks)}")
 
-    # 根据提供者创建对应的客户端（都支持上下文管理）
     if llm_provider == "kimi":
         client = KimiClient()
-        max_context_tokens = 194000  # 200K - 6K reserve
+        max_context_tokens = 194000
     elif llm_provider == "deepseek":
         client = DeepSeekClient()
-        max_context_tokens = 378000  # 384K - 6K reserve
+        max_context_tokens = 378000
     else:
         client = None
         adapter = LLMAdapter(llm_provider)
-        max_context_tokens = 122000  # Ollama 128K - 6K reserve
+        max_context_tokens = 122000
 
-    # 计算所有 chunks 的总 token 数
     all_text = "\n".join(chunks)
     total_tokens = estimate_tokens(all_text)
     print(f"[PERF] Total transcript tokens: {total_tokens}")
     print(f"[PERF] Model max context: {max_context_tokens} tokens")
 
-    # 如果所有文本可以直接放入上下文，直接一次性处理！
-    if total_tokens <= max_context_tokens * 0.8:  # 留 20% 余量给 prompt 和 response
+    if total_tokens <= max_context_tokens * 0.8:
         print(f"[PERF] Transcript fits in context window, processing in ONE request!")
 
         prompt = f"""作为我的投资顾问，请为以下投资视频的转录文本创建一个结构化的投资分析大纲。
@@ -53,6 +47,11 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 6. 逻辑要清晰，各部分之间要有合理的关联
 7. 语言要专业、准确、自然，体现你作为投资顾问的专业视角和朋友般的语气
 
+费曼学习法要求（必须遵守）：
+- 遇到专业术语或复杂概念时，必须用大白话解释，就像教一个完全不懂投资的朋友一样
+- 关键观点要引用视频原话，然后用自己的话解释原话的含义和重要性
+- 对抽象概念要举具体的例子或打比方，让人一看就懂
+
 分析要点：
 1. 识别视频的投资主题和核心投资观点
 2. 提取关键市场信息、数据和投资建议
@@ -63,9 +62,9 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 7. 直接改正文本中的错别字，不要标注
 
 分析层次：
-- 基础层：投资主题、市场背景、基本概念
-- 分析层：投资逻辑、策略分析、风险评估
-- 深度层：投资机会、市场趋势、长期展望
+- 基础层：投资主题、市场背景、基本概念（专业术语必须附通俗解释）
+- 分析层：投资逻辑、策略分析、风险评估（关键观点必须引用原话并展开说明）
+- 深度层：投资机会、市场趋势、长期展望（抽象判断必须举例说明）
 
 不要添加外部知识，不要进行推测，所有内容都必须基于转录文本。
 
@@ -89,14 +88,11 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 
         return summary
 
-    # 如果文本太长，需要分块处理，但尽量合并多个 chunk 一起发送
     print(f"[PERF] Transcript too long for single request, using batch processing...")
 
-    # 如果有状态化客户端，设置系统提示
     if client:
-        client.generate("你是一名资深的金融/经济/投资专家，拥有丰富的市场分析经验和专业知识。你擅长将复杂的投资概念解释清楚，并且能够提供深入、有洞察力的分析。我将为你提供投资相关视频的转录文本分段，希望你能以朋友般的专业顾问身份，为我生成一个全面、深入、有条理的分析报告。请直接改正转录文本中的错别字，不要标注，确保输出的内容专业、准确、有深度，同时语言自然、流畅、拟人化。", reset_context=True)
+        client.generate("你是一名资深的金融/经济/投资专家，拥有丰富的市场分析经验和专业知识。你擅长将复杂的投资概念用大白话解释清楚，就像教一个完全不懂投资的朋友一样。遇到专业术语必须通俗解释，关键观点必须引用原话并展开说明，抽象概念必须举例子或打比方。我将为你提供投资相关视频的转录文本分段，希望你能以朋友般的专业顾问身份，为我生成一个全面、深入、有条理的分析报告。请直接改正转录文本中的错别字，不要标注，确保输出的内容专业、准确、有深度，同时语言自然、流畅、拟人化。", reset_context=True)
 
-    # 合并 chunks 成批次，每批不超过模型限制的 70%
     batch_limit = int(max_context_tokens * 0.7)
     batches = []
     current_batch = []
@@ -105,7 +101,6 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
     for chunk in chunks:
         chunk_tokens = estimate_tokens(chunk)
         if current_batch_tokens + chunk_tokens > batch_limit and current_batch:
-            # 当前批次已满，保存并开始新批次
             batches.append("\n".join(current_batch))
             current_batch = [chunk]
             current_batch_tokens = chunk_tokens
@@ -118,7 +113,6 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 
     print(f"[PERF] Merged {len(chunks)} chunks into {len(batches)} batches")
 
-    # 对每个批次生成局部摘要
     partial_summaries = []
     batch_times = []
 
@@ -127,6 +121,11 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
         print(f"[PERF] Processing batch {i+1}/{len(batches)}...")
 
         batch_prompt = f"""作为我的投资顾问，请仔细分析以下投资视频的转录文本片段，然后以自然、专业的语气为我生成一个简洁但全面的分析总结。
+
+注意：
+- 遇到专业术语必须用大白话解释
+- 关键观点要引用原话并解释其含义
+- 抽象概念要举例子或打比方
 
 分析要点：
 1. 识别投资主题和核心投资观点
@@ -139,7 +138,7 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 转录文本片段：
 {batch}
 
-请以朋友般的专业顾问身份，为我提供一个结构清晰、信息准确的分析总结，语言自然流畅，同时体现你作为投资专家的专业视角："""
+请以朋友般的专业顾问身份，为我提供一个结构清晰，信息准确的分析总结，语言自然流畅，同时体现你作为投资专家的专业视角："""
 
         if client:
             partial_summary = client.generate(batch_prompt)
@@ -152,17 +151,14 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
         batch_times.append(batch_duration)
         print(f"[PERF] Batch {i+1} completed in {batch_duration:.2f}s")
 
-        # 智能等待
         if i < len(batches) - 1:
             avg_time = sum(batch_times) / len(batch_times)
             wait_time = min(max(avg_time * 0.1, 1), 5)
             print(f"[PERF] Average batch time: {avg_time:.2f}s, waiting {wait_time:.2f}s before next batch...")
             time.sleep(wait_time)
 
-    # 组合所有局部摘要生成最终大纲
     combined_summaries = "\n".join(partial_summaries)
 
-    # 保存中间结果
     try:
         from config import PARTIAL_SUMMARY_PATH
         partial_summary_dir = os.path.dirname(PARTIAL_SUMMARY_PATH)
@@ -185,10 +181,15 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
 6. 逻辑要清晰，各部分之间要有合理的关联
 7. 语言要专业、准确、自然，体现你作为投资顾问的专业视角和朋友般的语气
 
+费曼学习法要求（必须遵守）：
+- 遇到专业术语或复杂概念时，必须用大白话解释，就像教一个完全不懂投资的朋友一样
+- 关键观点要引用视频原话，然后用自己的话解释原话的含义和重要性
+- 对抽象概念要举具体的例子或打比方，让人一看就懂
+
 分析层次：
-- 基础层：投资主题、市场背景、基本概念
-- 分析层：投资逻辑、策略分析、风险评估
-- 深度层：投资机会、市场趋势、长期展望
+- 基础层：投资主题、市场背景、基本概念（专业术语必须附通俗解释）
+- 分析层：投资逻辑、策略分析、风险评估（关键观点必须引用原话并展开说明）
+- 深度层：投资机会、市场趋势、长期展望（抽象判断必须举例说明）
 
 不要添加外部知识，不要进行推测，所有内容都必须基于转录文本。
 
@@ -204,7 +205,6 @@ def outline_summary(chunks, llm_provider, detail_level, bullet_count):
         print("[PERF] Returning combined partial summaries as fallback...")
         summary = f"# 投资分析大纲（部分生成）\n\n> 注意：最终整合阶段出错，以下为各片段分析的汇总\n\n{combined_summaries}"
 
-    # 输出性能总结
     overall_duration = time.time() - overall_start
     print(f"\n[PERF] ========== Performance Summary ==========")
     print(f"[PERF] Total processing time: {overall_duration:.2f}s")

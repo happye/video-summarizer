@@ -1,6 +1,7 @@
 from summarizers.map_reduce import map_reduce_summary
 from summarizers.timeline_summary import timeline_summary
 from summarizers.outline_summary import outline_summary
+from utils.ai_logger import get_cache_logger
 import json
 import os
 
@@ -16,7 +17,10 @@ def generate_summary(chunks, llm_provider, mode, detail_level, bullet_count):
         summary = outline_summary(chunks, llm_provider, detail_level, bullet_count)
     else:
         raise ValueError(f"Unsupported summarization mode: {mode}")
-    
+
+    # Output session cache summary
+    get_cache_logger().log_summary()
+
     # Import PARTIAL_SUMMARY_PATH after setting paths
     from config import PARTIAL_SUMMARY_PATH
     print(f"PARTIAL_SUMMARY_PATH: {PARTIAL_SUMMARY_PATH}")

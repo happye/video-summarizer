@@ -1,6 +1,7 @@
 import requests
 import time
 from datetime import datetime
+from utils.ai_logger import get_cache_logger
 
 class PerformanceTracker:
     def __init__(self):
@@ -198,6 +199,8 @@ class BaseLLMClient:
                 data = self._build_request_data()
 
                 request_tokens = self._estimate_request_tokens()
+                cache_logger = get_cache_logger()
+                cache_logger.log_request(self.model, self.request_count, request_tokens, attempt + 1)
                 print(f"[PERF] Attempt {attempt + 1}/{self.max_retries}: Sending request ({request_tokens} tokens)...")
                 request_start = self.perf_tracker.start_request()
 
@@ -214,6 +217,14 @@ class BaseLLMClient:
 
                 duration = self.perf_tracker.end_request(success=True)
                 print(f"[PERF] Request completed successfully in {duration:.2f}s")
+
+                cache_logger.log_response(
+                    model=self.model,
+                    request_num=self.request_count,
+                    duration=duration,
+                    usage=result.get("usage", {}),
+                    headers=dict(response.headers)
+                )
 
                 return assistant_message["content"]
 
