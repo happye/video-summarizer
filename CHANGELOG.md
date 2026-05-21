@@ -19,6 +19,11 @@
   - 关键观点必须引用视频原话并展开说明
   - 抽象概念必须举例或打比方
 - **run.ps1 双模式**：启动时选择交互模式或单次模式
+- **AI转录纠错**：转录后自动用AI修正同音字、专业术语误识别等错误
+  - 纠错结果保存为 `transcript_corrected.json`，不覆盖原始文件
+  - 生成 `transcript_correction_diff.json` 差异记录，可追溯修改
+  - 纠错失败自动降级到原始 transcript
+  - `--no-correct` 参数可跳过纠错步骤
 
 ### 修复
 

@@ -17,6 +17,7 @@ def find_video_in_dir(directory):
 def process_video(video_path, video_name, args):
     from config import VIDEO_PATH, TRANSCRIPT_PATH, OUTPUT_PATH
     from pipeline.transcribe import transcribe_video
+    from pipeline.correct import correct_transcript
     from pipeline.chunker import chunk_transcript
     from pipeline.summarize import generate_summary
     from pipeline.output import write_output
@@ -31,6 +32,15 @@ def process_video(video_path, video_name, args):
     else:
         print(f"Transcript already exists: {TRANSCRIPT_PATH}, skipping transcription...")
         transcript_path = TRANSCRIPT_PATH
+
+    if not getattr(args, 'no_correct', False):
+        try:
+            corrected_path = correct_transcript(transcript_path, llm_provider=args.llm)
+            transcript_path = corrected_path
+        except Exception as e:
+            print(f"[CORRECT] Correction failed: {e}, using original transcript")
+    else:
+        print("[CORRECT] Skipping correction (--no-correct)")
 
     chunks = chunk_transcript(transcript_path, llm_provider=args.llm)
     summary = generate_summary(chunks, args.llm, args.mode, args.detail_level, args.bullet_count)
@@ -313,6 +323,7 @@ def main():
     parser.add_argument("--detail-level", type=int, default=2, help="Summary detail level (1-5)")
     parser.add_argument("--bullet-count", type=int, default=10, help="Number of bullet points")
     parser.add_argument("--force", action="store_true", help="Force reprocess even if output exists")
+    parser.add_argument("--no-correct", action="store_true", help="Skip transcript correction step")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode (keep running after processing)")
 
     args = parser.parse_args()

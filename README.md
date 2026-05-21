@@ -16,6 +16,7 @@
 - **本地视频目录**：直接处理已下载的视频，跳过下载步骤
 - **AI缓存命中日志**：前台+本地文件双记录，追踪API缓存效率
 - **费曼学习法提示词**：专业术语通俗解释、原话引用、举例说明
+- **AI转录纠错**：转录后自动用AI修正同音字、专业术语误识别等错误
 - 智能跳过已处理视频，避免重复下载和API调用
 - 中文文件名保留，不乱码
 
@@ -108,6 +109,7 @@ DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 | `--detail-level` | 总结详细程度（1-5，默认2） |
 | `--bullet-count` | 要点数量（默认10） |
 | `--force` | 强制重新处理已存在的视频 |
+| `--no-correct` | 跳过转录纠错步骤 |
 | `--interactive` / `-i` | 交互模式 |
 
 #### 示例命令
@@ -237,6 +239,7 @@ video-summarizer/
 ├── pipeline/                    # 处理流程
 │   ├── download.py              # 视频下载（URL清理、cookies）
 │   ├── transcribe.py            # 语音转录（Whisper medium）
+│   ├── correct.py               # 转录纠错（AI修正同音字/术语误识别）
 │   ├── chunker.py               # 文本分段（模型自适应大小）
 │   ├── summarize.py             # 总结调度（含缓存统计）
 │   └── output.py                # 输出处理

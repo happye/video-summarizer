@@ -17,6 +17,7 @@ def find_video_in_dir(directory):
 def process_video(video_path, video_name, args):
     from config import VIDEO_PATH, TRANSCRIPT_PATH, OUTPUT_PATH
     from pipeline.transcribe import transcribe_video
+    from pipeline.correct import correct_transcript
     from pipeline.chunker import chunk_transcript
     from pipeline.summarize import generate_summary
     from pipeline.output import write_output
@@ -32,11 +33,21 @@ def process_video(video_path, video_name, args):
         print(f"Transcript already exists: {TRANSCRIPT_PATH}, skipping transcription...")
         transcript_path = TRANSCRIPT_PATH
 
+    if not getattr(args, 'no_correct', False):
+        try:
+            corrected_path = correct_transcript(transcript_path, llm_provider=args.llm)
+            transcript_path = corrected_path
+        except Exception as e:
+            print(f"[CORRECT] Correction failed: {e}, using original transcript")
+    else:
+        print("[CORRECT] Skipping correction (--no-correct)")
+
     chunks = chunk_transcript(transcript_path, llm_provider=args.llm)
     summary = generate_summary(chunks, args.llm, args.mode, args.detail_level, args.bullet_count)
     write_output(summary, args.mode)
 
 def handle_command(input_str, llm, mode, detail_level, bullet_count, force=False):
+    """处理单条命令，返回是否继续"""
     input_str = input_str.strip()
     # 去除用户可能输入的反引号包裹（Markdown 习惯）
     if input_str.startswith('`') and input_str.endswith('`') and len(input_str) > 2:
@@ -270,6 +281,7 @@ def _process_file(args):
     process_video(VIDEO_PATH, video_name, args)
 
 def interactive_mode(llm, mode, detail_level, bullet_count, force=False):
+    """交互式循环模式"""
     print(f"\n{'='*50}")
     print(f"  Video Summarizer 交互模式")
     print(f"  LLM: {llm} | 模式: {mode} | 强制重处理: {'开' if force else '关'}")
@@ -290,6 +302,7 @@ def interactive_mode(llm, mode, detail_level, bullet_count, force=False):
         if not result:
             break
 
+        # 从命令中获取可能更新的 llm/mode/force 状态
         parts = user_input.split(maxsplit=1)
         cmd = parts[0].lower()
         arg = parts[1].strip() if len(parts) > 1 else ""
@@ -310,16 +323,19 @@ def main():
     parser.add_argument("--detail-level", type=int, default=2, help="Summary detail level (1-5)")
     parser.add_argument("--bullet-count", type=int, default=10, help="Number of bullet points")
     parser.add_argument("--force", action="store_true", help="Force reprocess even if output exists")
+    parser.add_argument("--no-correct", action="store_true", help="Skip transcript correction step")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode (keep running after processing)")
 
     args = parser.parse_args()
 
     has_input = args.url or args.file or args.local
 
+    # 如果指定了 --interactive 或没有提供任何输入，进入交互模式
     if args.interactive or not has_input:
         interactive_mode(args.llm, args.mode, args.detail_level, args.bullet_count, args.force)
         return
 
+    # 单次命令模式（兼容原有行为）
     class SingleArgs:
         pass
 
