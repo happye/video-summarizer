@@ -155,13 +155,15 @@ if ($runChoice -ne "2") {
     Write-Host "1) Online video URL (download from YouTube, Bilibili, etc.)"
     Write-Host "2) Local video directory (process already downloaded videos)"
     Write-Host "3) Local video file"
+    Write-Host "4) Download only (download video without transcription/summarization)"
     Write-Host
 
-    $inputChoice = Read-Host "Enter your choice (1-3, default: 1)"
+    $inputChoice = Read-Host "Enter your choice (1-4, default: 1)"
 
     $localDir = ""
     $localFile = ""
     $url = ""
+    $downloadOnly = $false
 
     if ($inputChoice -eq "2") {
         Write-Host
@@ -200,6 +202,17 @@ if ($runChoice -ne "2") {
         }
 
         Write-Host "Using local file: $localFile"
+    } elseif ($inputChoice -eq "4") {
+        $downloadOnly = $true
+        Write-Host
+        Write-Host "Please enter video URL:"
+        $url = Read-Host
+
+        if ([string]::IsNullOrEmpty($url)) {
+            Write-Host "Error: No URL specified."
+            Read-Host "Press any key to exit..."
+            exit 1
+        }
     } else {
         Write-Host
         Write-Host "Please enter video URL (or press Enter to use default test video):"
@@ -213,90 +226,94 @@ if ($runChoice -ne "2") {
 
     Write-Host
 
-    # Select LLM provider
-    Write-Host "==============================="
-    Write-Host "Select LLM Provider:"
-    Write-Host "==============================="
-    Write-Host "1) Kimi (Moonshot AI) - Default, supports long context"
-    Write-Host "2) DeepSeek - Requires DEEPSEEK_API_KEY in config.py"
-    Write-Host "3) Ollama - Local model, requires Ollama running"
-    Write-Host
+    if ($downloadOnly) {
+        python main.py --url "$url" --download-only
+    } else {
+        # Select LLM provider
+        Write-Host "==============================="
+        Write-Host "Select LLM Provider:"
+        Write-Host "==============================="
+        Write-Host "1) Kimi (Moonshot AI) - Default, supports long context"
+        Write-Host "2) DeepSeek - Requires DEEPSEEK_API_KEY in config.py"
+        Write-Host "3) Ollama - Local model, requires Ollama running"
+        Write-Host
 
-    $llmChoice = Read-Host "Enter your choice (1-3, default: 1)"
+        $llmChoice = Read-Host "Enter your choice (1-3, default: 1)"
 
-    $llmProvider = "kimi"
-    switch ($llmChoice) {
-        "2" { $llmProvider = "deepseek" }
-        "3" { $llmProvider = "ollama" }
-        default { $llmProvider = "kimi" }
-    }
-
-    Write-Host "Using LLM provider: $llmProvider"
-    Write-Host
-
-    # Check API key configuration
-    Write-Host "Checking API key configuration..."
-    try {
-        $configContent = Get-Content -Path "config.py" -Raw
-
-        if ($llmProvider -eq "kimi") {
-            if ($configContent -match 'KIMI_API_KEY\s*=\s*["\x27]\s*["\x27]') {
-                Write-Host "Warning: KIMI_API_KEY is empty. Please edit config.py and enter your Kimi API key."
-                Read-Host "Press any key to continue, or Ctrl+C to exit..."
-            } else {
-                Write-Host "Kimi API key configured."
-            }
-        } elseif ($llmProvider -eq "deepseek") {
-            if ($configContent -match 'DEEPSEEK_API_KEY\s*=\s*["\x27]\s*["\x27]') {
-                Write-Host "Warning: DEEPSEEK_API_KEY is empty. Please edit config.py and enter your DeepSeek API key."
-                Write-Host "Get your API key from: https://platform.deepseek.com/"
-                Read-Host "Press any key to continue, or Ctrl+C to exit..."
-            } else {
-                Write-Host "DeepSeek API key configured."
-            }
-        } elseif ($llmProvider -eq "ollama") {
-            Write-Host "Using Ollama local model. Make sure Ollama is running."
+        $llmProvider = "kimi"
+        switch ($llmChoice) {
+            "2" { $llmProvider = "deepseek" }
+            "3" { $llmProvider = "ollama" }
+            default { $llmProvider = "kimi" }
         }
 
-        Write-Host "API key configuration checked."
+        Write-Host "Using LLM provider: $llmProvider"
         Write-Host
-    } catch {
-        Write-Host "Error reading configuration file."
-        Read-Host "Press any key to exit..."
-        exit 1
-    }
 
-    # Select summarization mode
-    Write-Host "==============================="
-    Write-Host "Select Summarization Mode:"
-    Write-Host "==============================="
-    Write-Host "1) Outline - Structured hierarchical summary (default)"
-    Write-Host "2) Timeline - Chronological summary"
-    Write-Host "3) MapReduce - Parallel processing summary"
-    Write-Host
+        # Check API key configuration
+        Write-Host "Checking API key configuration..."
+        try {
+            $configContent = Get-Content -Path "config.py" -Raw
 
-    $modeChoice = Read-Host "Enter your choice (1-3, default: 1)"
+            if ($llmProvider -eq "kimi") {
+                if ($configContent -match 'KIMI_API_KEY\s*=\s*["\x27]\s*["\x27]') {
+                    Write-Host "Warning: KIMI_API_KEY is empty. Please edit config.py and enter your Kimi API key."
+                    Read-Host "Press any key to continue, or Ctrl+C to exit..."
+                } else {
+                    Write-Host "Kimi API key configured."
+                }
+            } elseif ($llmProvider -eq "deepseek") {
+                if ($configContent -match 'DEEPSEEK_API_KEY\s*=\s*["\x27]\s*["\x27]') {
+                    Write-Host "Warning: DEEPSEEK_API_KEY is empty. Please edit config.py and enter your DeepSeek API key."
+                    Write-Host "Get your API key from: https://platform.deepseek.com/"
+                    Read-Host "Press any key to continue, or Ctrl+C to exit..."
+                } else {
+                    Write-Host "DeepSeek API key configured."
+                }
+            } elseif ($llmProvider -eq "ollama") {
+                Write-Host "Using Ollama local model. Make sure Ollama is running."
+            }
 
-    $mode = "outline"
-    switch ($modeChoice) {
-        "2" { $mode = "timeline" }
-        "3" { $mode = "mapreduce" }
-        default { $mode = "outline" }
-    }
+            Write-Host "API key configuration checked."
+            Write-Host
+        } catch {
+            Write-Host "Error reading configuration file."
+            Read-Host "Press any key to exit..."
+            exit 1
+        }
 
-    Write-Host "Using mode: $mode"
-    Write-Host
+        # Select summarization mode
+        Write-Host "==============================="
+        Write-Host "Select Summarization Mode:"
+        Write-Host "==============================="
+        Write-Host "1) Outline - Structured hierarchical summary (default)"
+        Write-Host "2) Timeline - Chronological summary"
+        Write-Host "3) MapReduce - Parallel processing summary"
+        Write-Host
 
-    # Process video
-    Write-Host "Processing video..."
-    Write-Host
+        $modeChoice = Read-Host "Enter your choice (1-3, default: 1)"
 
-    if ($inputChoice -eq "2") {
-        python main.py --local "$localDir" --llm $llmProvider --mode $mode
-    } elseif ($inputChoice -eq "3") {
-        python main.py --file "$localFile" --llm $llmProvider --mode $mode
-    } else {
-        python main.py --url "$url" --llm $llmProvider --mode $mode
+        $mode = "outline"
+        switch ($modeChoice) {
+            "2" { $mode = "timeline" }
+            "3" { $mode = "mapreduce" }
+            default { $mode = "outline" }
+        }
+
+        Write-Host "Using mode: $mode"
+        Write-Host
+
+        # Process video
+        Write-Host "Processing video..."
+        Write-Host
+
+        if ($inputChoice -eq "2") {
+            python main.py --local "$localDir" --llm $llmProvider --mode $mode
+        } elseif ($inputChoice -eq "3") {
+            python main.py --file "$localFile" --llm $llmProvider --mode $mode
+        } else {
+            python main.py --url "$url" --llm $llmProvider --mode $mode
+        }
     }
 
     Write-Host

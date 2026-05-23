@@ -68,6 +68,7 @@ def handle_command(input_str, llm, mode, detail_level, bullet_count, force=False
         print("""
 可用命令：
   url <视频链接>       从URL下载并处理视频
+  download <视频链接>  仅下载视频，不转录和总结
   local <目录路径>     处理本地视频目录
   file <文件路径>      处理本地视频文件
   llm <ollama|kimi|deepseek>  切换LLM模型
@@ -108,9 +109,20 @@ def handle_command(input_str, llm, mode, detail_level, bullet_count, force=False
     args.detail_level = detail_level
     args.bullet_count = bullet_count
     args.force = force
+    args.download_only = False
 
     try:
-        if cmd == "url":
+        if cmd == "download":
+            if not arg:
+                print("错误: 请提供视频URL")
+                return True
+            args.url = arg
+            args.file = None
+            args.local = None
+            args.download_only = True
+            _process_url(args)
+
+        elif cmd == "url":
             if not arg:
                 print("错误: 请提供视频URL")
                 return True
@@ -179,11 +191,16 @@ def _process_url(args):
     from config import VIDEO_PATH, OUTPUT_PATH
     print(f"VIDEO_PATH: {VIDEO_PATH}")
 
-    if not args.force and os.path.exists(VIDEO_PATH) and os.path.exists(OUTPUT_PATH):
-        print(f"Video already processed: {VIDEO_PATH}")
-        print(f"Summary already exists: {OUTPUT_PATH}")
-        print("Skipping. Use --force to reprocess.")
-        return
+    if not args.force and os.path.exists(VIDEO_PATH):
+        if getattr(args, 'download_only', False):
+            print(f"Video already exists: {VIDEO_PATH}")
+            print("[DOWNLOAD-ONLY] Skipping download. Use --force to re-download.")
+            return
+        if os.path.exists(OUTPUT_PATH):
+            print(f"Video already processed: {VIDEO_PATH}")
+            print(f"Summary already exists: {OUTPUT_PATH}")
+            print("Skipping. Use --force to reprocess.")
+            return
 
     print(f"Moving temp video from {temp_video_path} to {VIDEO_PATH}")
     os.makedirs(video_dir, exist_ok=True)
@@ -191,7 +208,11 @@ def _process_url(args):
     video_path = VIDEO_PATH
     print(f"Video moved to: {VIDEO_PATH}")
 
-    process_video(video_path, video_name, args)
+    if getattr(args, 'download_only', False):
+        print(f"[DOWNLOAD-ONLY] Video downloaded to: {VIDEO_PATH}")
+        print("[DOWNLOAD-ONLY] Skipping transcription and summarization")
+    else:
+        process_video(video_path, video_name, args)
 
     if os.path.exists("temp"):
         temp_files = glob.glob("temp/*")
@@ -324,6 +345,7 @@ def main():
     parser.add_argument("--bullet-count", type=int, default=10, help="Number of bullet points")
     parser.add_argument("--force", action="store_true", help="Force reprocess even if output exists")
     parser.add_argument("--no-correct", action="store_true", help="Skip transcript correction step")
+    parser.add_argument("--download-only", action="store_true", help="Only download video, skip transcription and summarization")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode (keep running after processing)")
 
     args = parser.parse_args()
@@ -345,6 +367,7 @@ def main():
     single_args.detail_level = args.detail_level
     single_args.bullet_count = args.bullet_count
     single_args.force = args.force
+    single_args.download_only = args.download_only
 
     if args.local:
         single_args.url = None

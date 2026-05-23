@@ -17,6 +17,7 @@
 - **AI缓存命中日志**：前台+本地文件双记录，追踪API缓存效率
 - **费曼学习法提示词**：专业术语通俗解释、原话引用、举例说明
 - **AI转录纠错**：转录后自动用AI修正同音字、专业术语误识别等错误
+- **仅下载模式**：`--download-only` 或交互命令 `download`，只下载视频不转录总结
 - 智能跳过已处理视频，避免重复下载和API调用
 - 中文文件名保留，不乱码
 
@@ -85,6 +86,7 @@ DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 | 命令 | 说明 |
 |------|------|
 | `url <视频链接>` | 从URL下载并处理 |
+| `download <视频链接>` | 仅下载视频，不转录和总结 |
 | `local <目录路径>` | 处理本地视频目录 |
 | `file <文件路径>` | 处理本地视频文件 |
 | `llm <kimi/deepseek/ollama>` | 切换LLM模型 |
@@ -110,6 +112,7 @@ DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 | `--bullet-count` | 要点数量（默认10） |
 | `--force` | 强制重新处理已存在的视频 |
 | `--no-correct` | 跳过转录纠错步骤 |
+| `--download-only` | 仅下载视频，跳过转录和总结 |
 | `--interactive` / `-i` | 交互模式 |
 
 #### 示例命令
@@ -132,6 +135,9 @@ python main.py --file "path/to/video.mp4" --llm kimi --mode outline
 
 # 生成时间线总结
 python main.py --url "视频URL" --llm deepseek --mode timeline
+
+# 仅下载视频，不转录和总结
+python main.py --url "视频URL" --download-only
 ```
 
 ### 方式三：API连通性测试
@@ -254,7 +260,7 @@ video-summarizer/
 
 ## 版本信息
 
-当前版本：**v1.3.0** (2026-05-09)
+当前版本：**v1.4.0** (2026-05-23)
 
 查看完整版本记录：[CHANGELOG.md](CHANGELOG.md)
 
