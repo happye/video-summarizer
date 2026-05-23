@@ -232,7 +232,7 @@ python test_deepseek.py
 video-summarizer/
 ├── main.py                      # 主入口（交互模式+单次模式）
 ├── config.py                    # 配置文件（API密钥等）
-├── run.ps1                      # 启动脚本（交互/单次双模式）
+├── run.ps1                      # 启动脚本（交互/下载/单次三模式）
 ├── CHANGELOG.md                 # 版本记录
 ├── README.md                    # 使用文档
 ├── requirements.txt             # Python依赖

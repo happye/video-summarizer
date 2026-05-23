@@ -7,7 +7,7 @@
 - **仅下载模式**：下载视频但不转录和总结
   - 命令行参数 `--download-only`：`python main.py --url "视频URL" --download-only`
   - 交互模式命令 `download <视频链接>`：仅下载，不触发转录和总结
-  - run.ps1 单次模式新增选项4：Download only
+  - run.ps1 新增选项2：Download only（连续下载循环，输入 q 退出）
   - 仅下载模式下跳过 LLM 选择、API Key 检查、总结模式选择
 
 ---
