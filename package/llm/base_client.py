@@ -150,8 +150,10 @@ class BaseLLMClient:
             total_tokens = self._estimate_request_tokens()
             print(f"[PERF] Estimated context tokens: {total_tokens}")
 
-            if total_tokens > 80000:
-                print("[PERF] Context too large, triggering compression...")
+            # 使用各模型自己的限制比例（50%）来判断是否需要压缩
+            health_threshold = int(self.max_tokens_per_request * 0.5)
+            if total_tokens > health_threshold:
+                print(f"[PERF] Context exceeds {health_threshold} tokens ({self.max_tokens_per_request} max), triggering compression check...")
                 self._check_and_compress_context()
 
     def _build_request_data(self):
@@ -232,10 +234,9 @@ class BaseLLMClient:
                 duration = self.perf_tracker.end_request(success=False, error="Timeout")
                 print(f"[PERF] Timeout after {duration:.2f}s (attempt {attempt + 1}/{self.max_retries})")
                 if attempt < self.max_retries - 1:
-                    wait_time = self.retry_delay
+                    wait_time = self.retry_delay * (2 ** attempt)
                     print(f"[PERF] Waiting {wait_time}s before retry...")
                     time.sleep(wait_time)
-                    self.retry_delay *= 2
                 else:
                     raise Exception(f"Timeout after {self.max_retries} attempts: {str(e)}")
 

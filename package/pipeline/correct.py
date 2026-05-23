@@ -228,4 +228,5 @@ def _apply_corrections(segments, original_text, corrected_text):
         new_seg["text"] = seg.get("text", "")
         corrected_segments.append(new_seg)
 
+    print(f"[CORRECT] Word count mismatch (orig={len(orig_parts)}, corr={len(corr_parts)}), segments not updated")
     return corrected_segments

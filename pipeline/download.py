@@ -27,22 +27,31 @@ def download_video(url):
     title_process = subprocess.Popen(
         title_args,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True
     )
-    video_title = title_process.stdout.read().strip()
-    title_process.wait()
+    stdout, stderr = title_process.communicate()
+    title_lines = [line.strip() for line in stdout.strip().splitlines() if line.strip()]
+    video_title = ""
+    for line in reversed(title_lines):
+        if not line.upper().startswith("WARNING") and not line.upper().startswith("ERROR") and not line.startswith("["):
+            video_title = line
+            break
+    if not video_title and title_lines:
+        video_title = title_lines[-1]
     
-    # Check if title is empty or contains errors
-    if not video_title or "ERROR" in video_title or "Error" in video_title:
+    if not video_title or video_title.upper().startswith("WARNING") or video_title.upper().startswith("ERROR") or "HTTPSConnectionPool" in video_title:
         print(f"Warning: Failed to get video title, using URL-based title")
-        # Extract video ID from URL as fallback
         import re
         video_id_match = re.search(r'BV([a-zA-Z0-9]+)', url)
         if video_id_match:
             video_title = f"video_{video_id_match.group(1)}"
         else:
-            video_title = "video_download"
+            video_id_match = re.search(r'(?:v=|youtu\.be/|/shorts/)([a-zA-Z0-9_-]{11})', url)
+            if video_id_match:
+                video_title = f"video_{video_id_match.group(1)}"
+            else:
+                video_title = "video_download"
     
     # Clean up video title to remove invalid characters for filename
     import re
@@ -99,35 +108,48 @@ def download_video(url):
     process = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True
     )
     
-    # Read and display output in real-time
+    stdout_lines = []
+    stderr_lines = []
     for line in iter(process.stdout.readline, ''):
+        stdout_lines.append(line.strip())
+        print(line.strip())
+    for line in iter(process.stderr.readline, ''):
+        stderr_lines.append(line.strip())
         print(line.strip())
     
-    # Wait for process to complete
     process.wait()
     
     if process.returncode != 0:
-        # If download fails, show available formats for debugging
-        print("\nShowing available formats for debugging:")
-        debug_args = [yt_dlp_path, "--no-playlist", "--list-formats"]
-        if os.path.exists(cookies_path):
-            debug_args.extend(["--cookies", cookies_path])
-        debug_args.append(url)
-        formats_process = subprocess.Popen(
-            debug_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-        for line in iter(formats_process.stdout.readline, ''):
-            print(line.strip())
-        formats_process.wait()
+        has_video = False
+        import glob as _glob
+        for ext in ('*.mp4', '*.mkv', '*.webm'):
+            if _glob.glob(f"temp/{ext}"):
+                has_video = True
+                break
         
-        raise Exception(f"Failed to download video. Return code: {process.returncode}")
+        if has_video:
+            print(f"[DOWNLOAD] yt-dlp exited with code {process.returncode} but video file exists, treating as success")
+        else:
+            print("\nShowing available formats for debugging:")
+            debug_args = [yt_dlp_path, "--no-playlist", "--list-formats"]
+            if os.path.exists(cookies_path):
+                debug_args.extend(["--cookies", cookies_path])
+            debug_args.append(url)
+            formats_process = subprocess.Popen(
+                debug_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+            for line in iter(formats_process.stdout.readline, ''):
+                print(line.strip())
+            formats_process.wait()
+            
+            raise Exception(f"Failed to download video. Return code: {process.returncode}")
     
     print("----------------------------------------")
     
@@ -141,6 +163,10 @@ def download_video(url):
     video_files.sort(key=os.path.getmtime, reverse=True)
     temp_video_path = video_files[0]
     
-    # Return video path and cleaned title (for consistent path naming)
+    # Return video path, cleaned title, and actual file extension
+    _, actual_ext = os.path.splitext(temp_video_path)
+    if not actual_ext:
+        actual_ext = ".mp4"
+    
     print(f"Download completed successfully! Video saved as: {temp_video_path}")
-    return temp_video_path, video_title_clean
+    return temp_video_path, video_title_clean, actual_ext

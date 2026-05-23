@@ -234,10 +234,9 @@ class BaseLLMClient:
                 duration = self.perf_tracker.end_request(success=False, error="Timeout")
                 print(f"[PERF] Timeout after {duration:.2f}s (attempt {attempt + 1}/{self.max_retries})")
                 if attempt < self.max_retries - 1:
-                    wait_time = self.retry_delay
+                    wait_time = self.retry_delay * (2 ** attempt)
                     print(f"[PERF] Waiting {wait_time}s before retry...")
                     time.sleep(wait_time)
-                    self.retry_delay *= 2
                 else:
                     raise Exception(f"Timeout after {self.max_retries} attempts: {str(e)}")
 

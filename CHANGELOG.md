@@ -10,6 +10,15 @@
   - run.ps1 新增选项2：Download only（连续下载循环，输入 q 退出）
   - 仅下载模式下跳过 LLM 选择、API Key 检查、总结模式选择
 
+### Bug 修复
+
+- **下载标题被 yt-dlp 警告污染**：标题获取和下载流程分离 stderr，过滤 WARNING/ERROR 行，防止警告信息被当作视频标题
+- **视频文件扩展名硬编码 .mp4**：`set_paths()` 和 `download_video()` 支持实际扩展名（.webm/.mkv/.mp4），不再强制 .mp4
+- **下载成功但 yt-dlp 返回非0退出码时误报失败**：检查 temp 目录是否有视频文件，有则视为成功
+- **SingleArgs 缺少 no_correct 属性**：`--no-correct` 参数在单次模式下被忽略
+- **correct.py 纠错词数不匹配时静默丢弃结果**：添加警告日志
+- **base_client.py retry_delay 被永久修改**：Timeout 重试改为局部计算退避时间，不污染实例变量
+
 ---
 
 ## v1.3.0 (2026-05-09)

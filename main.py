@@ -182,10 +182,10 @@ def handle_command(input_str, llm, mode, detail_level, bullet_count, force=False
 
 def _process_url(args):
     from pipeline.download import download_video
-    temp_video_path, video_name = download_video(args.url)
+    temp_video_path, video_name, actual_ext = download_video(args.url)
 
     print(f"Setting paths for video: {video_name}")
-    video_dir = set_paths(video_name)
+    video_dir = set_paths(video_name, actual_ext)
     print(f"Video directory: {video_dir}")
 
     from config import VIDEO_PATH, OUTPUT_PATH
@@ -368,6 +368,7 @@ def main():
     single_args.bullet_count = args.bullet_count
     single_args.force = args.force
     single_args.download_only = args.download_only
+    single_args.no_correct = args.no_correct
 
     if args.local:
         single_args.url = None
