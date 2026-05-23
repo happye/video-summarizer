@@ -68,7 +68,10 @@ def download_video(url):
         if video_files:
             print(f"Video already exists in output directory: {video_files[0]}")
             print("Skipping download, using existing file...")
-            return video_files[0], video_title_clean
+            _, existing_ext = os.path.splitext(video_files[0])
+            if not existing_ext:
+                existing_ext = ".mp4"
+            return video_files[0], video_title_clean, existing_ext
     
     # Build command arguments
     args = [yt_dlp_path]
@@ -84,7 +87,8 @@ def download_video(url):
     # Add output format and URL
     # Use --no-restrict-filenames to preserve Unicode characters (Chinese, etc.)
     temp_output = f"temp/%(title)s.%(ext)s"
-    args.extend(["-o", temp_output, "--no-playlist", "--no-restrict-filenames", url])
+    args.extend(["-o", temp_output, "--no-playlist", "--no-restrict-filenames",
+                 "--merge-output-format", "mp4", url])
     
     # Run yt-dlp with live output
     print(f"Running: {' '.join(args)}")
