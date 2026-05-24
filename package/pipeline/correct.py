@@ -78,16 +78,19 @@ def correct_transcript(transcript_path, llm_provider="deepseek"):
         client = KimiClient()
         adapter = None
         max_context_tokens = 194000
+        max_output_tokens = 262144
     elif llm_provider == "deepseek":
         client = DeepSeekClient()
         adapter = None
         max_context_tokens = 378000
+        max_output_tokens = 384000
     else:
         client = None
         adapter = LLMAdapter(llm_provider)
         max_context_tokens = 122000
+        max_output_tokens = 122000
 
-    corrected_text = _correct_text(original_text, total_tokens, max_context_tokens, client, adapter, llm_provider)
+    corrected_text = _correct_text(original_text, total_tokens, max_context_tokens, max_output_tokens, client, adapter, llm_provider)
 
     if not corrected_text or not corrected_text.strip():
         print("[CORRECT] Correction returned empty, falling back to original")
@@ -110,14 +113,15 @@ def correct_transcript(transcript_path, llm_provider="deepseek"):
     return corrected_path
 
 
-def _correct_text(text, total_tokens, max_context_tokens, client, adapter, llm_provider):
+def _correct_text(text, total_tokens, max_context_tokens, max_output_tokens, client, adapter, llm_provider):
     """根据文本长度选择单次或分批纠错"""
-    if total_tokens <= max_context_tokens * 0.7:
-        print(f"[CORRECT] Single request correction ({total_tokens} tokens)")
+    effective_limit = min(max_context_tokens * 0.7, max_output_tokens * 0.9)
+    if total_tokens <= effective_limit:
+        print(f"[CORRECT] Single request correction ({total_tokens} tokens, limit={int(effective_limit)})")
         return _correct_single(text, client, adapter)
 
-    print(f"[CORRECT] Batch correction ({total_tokens} tokens > {int(max_context_tokens * 0.7)})")
-    return _correct_batch(text, max_context_tokens, client, adapter)
+    print(f"[CORRECT] Batch correction ({total_tokens} tokens > {int(effective_limit)})")
+    return _correct_batch(text, max_output_tokens, client, adapter)
 
 
 def _correct_single(text, client, adapter):
@@ -132,8 +136,8 @@ def _correct_single(text, client, adapter):
         return None
 
 
-def _correct_batch(text, max_context_tokens, client, adapter):
-    batch_limit = int(max_context_tokens * 0.6)
+def _correct_batch(text, max_output_tokens, client, adapter):
+    batch_limit = int(max_output_tokens * 0.8)
     chunk_size = batch_limit
 
     chunks = []

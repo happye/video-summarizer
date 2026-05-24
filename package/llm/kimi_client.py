@@ -21,6 +21,7 @@ class KimiClient(BaseLLMClient):
         return {
             "model": self.model,
             "messages": self.messages,
+            "max_tokens": 262144,
             "timeout": self.timeout
         }
 

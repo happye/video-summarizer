@@ -28,7 +28,7 @@ class DeepSeekClient(BaseLLMClient):
             "model": self.model,
             "messages": self.messages,
             "temperature": 0.7,
-            "max_tokens": 4096,
+            "max_tokens": 384000,
             "stream": False
         }
 
