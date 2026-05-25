@@ -74,23 +74,21 @@ class BaseLLMClient:
         self.max_context_messages = max_context_messages
         self.max_tokens_per_request = max_tokens_per_request
         self.context_summary = ""
+        self.last_finish_reason = None
+        self.last_usage = {}
 
     def _estimate_tokens(self, text):
-        """估算文本的token数量（粗略估计：中文约1.5字符/token，英文约0.25词/token）"""
         chinese_chars = sum(1 for char in text if '\u4e00' <= char <= '\u9fff')
-        # 英文词数 = 总词数 - 中文词（每个中文字符被split算作一个词）
         total_words = len(text.split())
         english_words = max(0, total_words - chinese_chars)
         return max(1, int(chinese_chars / 1.5 + english_words / 0.25))
 
     def _estimate_request_tokens(self):
-        """估算当前请求的总token数"""
         return sum(self._estimate_tokens(msg.get("content", "")) for msg in self.messages)
 
     def _manage_context(self):
-        """智能上下文管理：严格控制上下文大小"""
         if len(self.messages) > self.max_context_messages:
-            print(f"[PERF] Context size ({len(self.messages)}) exceeds limit ({self.max_context_messages}), compressing...")
+            print(f"[LLM] 上下文消息数 ({len(self.messages)}) 超过限制 ({self.max_context_messages}), 压缩中...")
 
             system_messages = [msg for msg in self.messages if msg.get("role") == "system"]
             recent_messages = self.messages[-(self.max_context_messages // 2):]
@@ -103,14 +101,13 @@ class BaseLLMClient:
                     "content": f"[历史摘要] {summary_text}"
                 }
                 self.messages = system_messages + [summary_message] + recent_messages
-                print(f"[PERF] Context compressed from {len(self.messages) + len(middle_messages)} to {len(self.messages)} messages")
+                print(f"[LLM] 上下文压缩: {len(self.messages) + len(middle_messages)} → {len(self.messages)} 条消息")
 
     def _check_and_compress_context(self):
-        """检查并压缩上下文，确保不超过token限制"""
         total_tokens = self._estimate_request_tokens()
 
         if total_tokens > self.max_tokens_per_request:
-            print(f"[PERF] Request tokens ({total_tokens}) exceed limit ({self.max_tokens_per_request}), compressing...")
+            print(f"[LLM] 请求tokens ({total_tokens}) 超过限制 ({self.max_tokens_per_request}), 压缩中...")
 
             keep_first = 1 if self.messages and self.messages[0].get("role") == "system" else 0
             recent_count = min(5, len(self.messages) // 3)
@@ -139,25 +136,20 @@ class BaseLLMClient:
                 self.messages = first_message + [summary_message] + recent_messages
 
                 new_tokens = self._estimate_request_tokens()
-                print(f"[PERF] Context compressed from {total_tokens} to {new_tokens} tokens, {len(self.messages)} messages")
+                print(f"[LLM] 上下文压缩: {total_tokens} → {new_tokens} tokens, {len(self.messages)} 条消息")
 
     def _check_session_health(self):
-        """检查会话健康状态"""
         if self.request_count > 0 and self.request_count % 10 == 0:
-            print(f"[PERF] Session health check: {self.request_count} requests processed")
-            print(f"[PERF] Current context size: {len(self.messages)} messages")
+            print(f"[LLM] 会话健康检查: 已处理 {self.request_count} 个请求, 上下文: {len(self.messages)} 条消息")
 
             total_tokens = self._estimate_request_tokens()
-            print(f"[PERF] Estimated context tokens: {total_tokens}")
 
-            # 使用各模型自己的限制比例（50%）来判断是否需要压缩
             health_threshold = int(self.max_tokens_per_request * 0.5)
             if total_tokens > health_threshold:
-                print(f"[PERF] Context exceeds {health_threshold} tokens ({self.max_tokens_per_request} max), triggering compression check...")
+                print(f"[LLM] 上下文tokens ({total_tokens}) 超过阈值 ({health_threshold}), 触发压缩...")
                 self._check_and_compress_context()
 
     def _build_request_data(self):
-        """构建请求体，子类可覆盖"""
         return {
             "model": self.model,
             "messages": self.messages,
@@ -165,11 +157,9 @@ class BaseLLMClient:
         }
 
     def _parse_response(self, response_json):
-        """解析响应，子类可覆盖"""
         return response_json["choices"][0]["message"]
 
     def generate(self, prompt, reset_context=False):
-        """通用的文本生成方法，带上下文管理和重试机制"""
         if not self.api_key:
             raise ValueError(f"API key is not set in config.py")
 
@@ -177,10 +167,10 @@ class BaseLLMClient:
             self.messages = []
             self.request_count = 0
             self.context_summary = ""
-            print("[PERF] Context reset, starting new session")
+            print(f"[LLM] 上下文已重置, 开始新会话 [{self.model}]")
 
         self.request_count += 1
-        print(f"[PERF] Request #{self.request_count}, Context size: {len(self.messages)} messages")
+        print(f"[LLM] 请求 #{self.request_count}, 上下文: {len(self.messages)} 条消息")
 
         self._check_session_health()
 
@@ -203,22 +193,31 @@ class BaseLLMClient:
                 request_tokens = self._estimate_request_tokens()
                 cache_logger = get_cache_logger()
                 cache_logger.log_request(self.model, self.request_count, request_tokens, attempt + 1)
-                print(f"[PERF] Attempt {attempt + 1}/{self.max_retries}: Sending request ({request_tokens} tokens)...")
+                print(f"[LLM] 尝试 {attempt + 1}/{self.max_retries}: 发送请求 ({request_tokens} tokens)...")
                 request_start = self.perf_tracker.start_request()
 
                 response = requests.post(self.api_url, headers=headers, json=data, timeout=self.timeout)
 
                 if response.status_code != 200:
-                    print(f"[PERF] API Error: {response.status_code} - {response.text}")
+                    print(f"[LLM] API错误: HTTP {response.status_code} - {response.text[:500]}")
                 response.raise_for_status()
 
                 result = response.json()
                 assistant_message = self._parse_response(result)
 
+                self.last_finish_reason = result["choices"][0].get("finish_reason", "unknown")
+                self.last_usage = result.get("usage", {})
+
                 self.messages.append(assistant_message)
 
                 duration = self.perf_tracker.end_request(success=True)
-                print(f"[PERF] Request completed successfully in {duration:.2f}s")
+
+                completion_tokens = self.last_usage.get("completion_tokens", 0)
+                content_length = len(assistant_message.get("content", "") or "")
+                print(f"[LLM] 请求成功: {duration:.2f}s, 输出: {completion_tokens} tokens/{content_length} 字符, finish_reason={self.last_finish_reason}")
+
+                if self.last_finish_reason == "length":
+                    print(f"[LLM] ⚠ 输出被截断! finish_reason=length, 输出达到max_tokens上限, 内容不完整")
 
                 cache_logger.log_response(
                     model=self.model,
@@ -232,10 +231,10 @@ class BaseLLMClient:
 
             except requests.exceptions.Timeout as e:
                 duration = self.perf_tracker.end_request(success=False, error="Timeout")
-                print(f"[PERF] Timeout after {duration:.2f}s (attempt {attempt + 1}/{self.max_retries})")
+                print(f"[LLM] 超时: {duration:.2f}s (尝试 {attempt + 1}/{self.max_retries})")
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
-                    print(f"[PERF] Waiting {wait_time}s before retry...")
+                    print(f"[LLM] 等待 {wait_time}s 后重试...")
                     time.sleep(wait_time)
                 else:
                     raise Exception(f"Timeout after {self.max_retries} attempts: {str(e)}")
@@ -243,10 +242,10 @@ class BaseLLMClient:
             except requests.exceptions.HTTPError as e:
                 duration = self.perf_tracker.end_request(success=False, error=f"HTTP {e.response.status_code}")
                 if e.response.status_code == 429:
-                    print(f"[PERF] Rate limit exceeded (429) (attempt {attempt + 1}/{self.max_retries})")
+                    print(f"[LLM] 限流 (429) (尝试 {attempt + 1}/{self.max_retries})")
                     if attempt < self.max_retries - 1:
                         backoff_time = self.retry_delay * (2 ** attempt)
-                        print(f"[PERF] Waiting {backoff_time}s before retry...")
+                        print(f"[LLM] 等待 {backoff_time}s 后重试...")
                         time.sleep(backoff_time)
                     else:
                         raise Exception(f"Rate limit exceeded after {self.max_retries} attempts. Please try again later.")
@@ -258,14 +257,14 @@ class BaseLLMClient:
                 error_str = str(e)
 
                 if "ProxyError" in error_str or "Unable to connect to proxy" in error_str:
-                    print(f"[PERF] Proxy connection failed: {error_str}")
+                    print(f"[LLM] 代理连接失败: {error_str}")
                     raise Exception(f"Proxy connection failed. The request may be too large or the proxy is unavailable. "
                                     f"Try reducing context size or check proxy settings. Error: {error_str}")
 
-                print(f"[PERF] Connection error (attempt {attempt + 1}/{self.max_retries}): {error_str}")
+                print(f"[LLM] 连接错误 (尝试 {attempt + 1}/{self.max_retries}): {error_str}")
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
-                    print(f"[PERF] Waiting {wait_time}s before retry...")
+                    print(f"[LLM] 等待 {wait_time}s 后重试...")
                     time.sleep(wait_time)
                 else:
                     raise Exception(f"Connection error after {self.max_retries} attempts: {error_str}")
