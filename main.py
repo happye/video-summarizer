@@ -54,7 +54,7 @@ def process_video(video_path, video_name, args):
     else:
         print("[CORRECT] Skipping correction (--no-correct)")
 
-    chunks = chunk_transcript(transcript_path, llm_provider=args.llm)
+    chunks = chunk_transcript(transcript_path)
     summary = generate_summary(chunks, args.llm, args.mode, args.detail_level, args.bullet_count)
     write_output(summary, args.mode)
 
