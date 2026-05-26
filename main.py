@@ -6,6 +6,18 @@ from config import MODEL_PROVIDER, SUMMARY_STYLE, set_paths
 
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.wmv', '.ts', '.mp3', '.wav', '.m4a', '.flac'}
 
+class ProcessArgs:
+    llm = "kimi"
+    mode = "outline"
+    detail_level = 2
+    bullet_count = 10
+    force = False
+    download_only = False
+    no_correct = False
+    url = None
+    file = None
+    local = None
+
 def find_video_in_dir(directory):
     for ext in sorted(VIDEO_EXTENSIONS):
         matches = glob.glob(os.path.join(directory, f"*{ext}"))
@@ -100,10 +112,7 @@ def handle_command(input_str, llm, mode, detail_level, bullet_count, force=False
         print(f"强制重处理模式: {'开启' if force else '关闭'}")
         return True
 
-    class Args:
-        pass
-
-    args = Args()
+    args = ProcessArgs()
     args.llm = llm
     args.mode = mode
     args.detail_level = detail_level
@@ -283,23 +292,132 @@ def _process_file(args):
         print("Skipping. Use --force to reprocess.")
         return
 
-    print(f"Copying local video from {video_path} to {VIDEO_PATH}")
-    os.makedirs(video_dir, exist_ok=True)
-
-    try:
-        shutil.copy2(video_path, VIDEO_PATH)
-        print(f"Video copied to: {VIDEO_PATH}")
-    except Exception as e:
-        print(f"Error copying video: {e}")
-        abs_src = os.path.abspath(video_path)
-        abs_dst = os.path.abspath(VIDEO_PATH)
-        print(f"Trying with absolute paths:")
-        print(f"  Source: {abs_src}")
-        print(f"  Destination: {abs_dst}")
-        shutil.copy2(abs_src, abs_dst)
-        print(f"Video copied to: {abs_dst}")
+    src_abs = os.path.abspath(video_path)
+    dst_abs = os.path.abspath(VIDEO_PATH)
+    if os.path.normcase(os.path.normpath(src_abs)) == os.path.normcase(os.path.normpath(dst_abs)):
+        print(f"Video is already at target location: {VIDEO_PATH}")
+    else:
+        print(f"Copying local video from {video_path} to {VIDEO_PATH}")
+        os.makedirs(video_dir, exist_ok=True)
+        try:
+            shutil.copy2(video_path, VIDEO_PATH)
+            print(f"Video copied to: {VIDEO_PATH}")
+        except Exception as e:
+            print(f"Error copying video: {e}")
+            print(f"Trying with absolute paths:")
+            print(f"  Source: {src_abs}")
+            print(f"  Destination: {dst_abs}")
+            shutil.copy2(src_abs, dst_abs)
+            print(f"Video copied to: {dst_abs}")
 
     process_video(VIDEO_PATH, video_name, args)
+
+def local_loop_mode(llm, mode, detail_level, bullet_count, force=False):
+    """本地视频循环模式：接收视频路径，处理完等待下一次输入"""
+    print(f"\n{'='*50}")
+    print(f"  本地视频循环处理模式")
+    print(f"  LLM: {llm} | 模式: {mode} | 强制重处理: {'开' if force else '关'}")
+    print(f"  输入视频文件或目录路径即可处理")
+    print(f"  输入 llm/mode/force 切换设置，help 查看帮助，exit 退出")
+    print(f"{'='*50}\n")
+
+    while True:
+        try:
+            user_input = input("[视频路径] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye!")
+            break
+
+        if not user_input:
+            continue
+
+        raw_input = user_input
+
+        user_input = user_input.strip()
+        if len(user_input) >= 2 and (
+            (user_input.startswith('"') and user_input.endswith('"')) or
+            (user_input.startswith("'") and user_input.endswith("'"))
+        ):
+            user_input = user_input[1:-1]
+        user_input = user_input.strip('`')
+
+        if user_input.lower() in ("exit", "quit", "q"):
+            print("Bye!")
+            break
+
+        if user_input.lower() == "help":
+            print("""
+可用命令：
+  <视频文件路径>       直接输入视频文件路径即可处理
+  <目录路径>           输入包含视频的目录路径
+  llm <ollama|kimi|deepseek>  切换LLM模型
+  mode <outline|timeline|mapreduce>  切换摘要模式
+  force                切换强制重处理模式
+  help                 显示帮助
+  exit / quit / q      退出程序
+""")
+            continue
+
+        parts = user_input.split(maxsplit=1)
+        cmd = parts[0].lower()
+        arg = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd == "llm" and arg in ("ollama", "kimi", "deepseek"):
+            llm = arg
+            print(f"LLM 切换为: {llm}")
+            continue
+
+        if cmd == "mode" and arg in ("outline", "timeline", "mapreduce"):
+            mode = arg
+            print(f"摘要模式切换为: {mode}")
+            continue
+
+        if cmd == "force" and not arg:
+            force = not force
+            print(f"强制重处理模式: {'开启' if force else '关闭'}")
+            continue
+
+        video_path = os.path.normpath(user_input)
+        if not os.path.exists(video_path):
+            print(f"路径不存在: {video_path}")
+            continue
+
+        args = ProcessArgs()
+        args.llm = llm
+        args.mode = mode
+        args.detail_level = detail_level
+        args.bullet_count = bullet_count
+        args.force = force
+        args.download_only = False
+        args.no_correct = False
+
+        try:
+            if os.path.isdir(video_path):
+                args.url = None
+                args.file = None
+                args.local = video_path
+                print(f"\n--- 处理目录: {video_path} ---")
+                _process_local(args)
+            elif os.path.isfile(video_path):
+                ext = os.path.splitext(video_path)[1].lower()
+                if ext in VIDEO_EXTENSIONS:
+                    args.url = None
+                    args.file = video_path
+                    args.local = None
+                    print(f"\n--- 处理文件: {video_path} ---")
+                    _process_file(args)
+                else:
+                    print(f"不支持的文件格式: {ext}")
+                    print(f"支持格式: {', '.join(sorted(VIDEO_EXTENSIONS))}")
+            else:
+                print(f"路径既不是文件也不是目录: {video_path}")
+        except Exception as e:
+            print(f"\n处理出错: {e}")
+            print("可以继续输入下一个视频路径")
+
+        print(f"\n{'─'*40}")
+        print(f"处理完成，等待下一个视频路径...")
+        print(f"{'─'*40}\n")
 
 def interactive_mode(llm, mode, detail_level, bullet_count, force=False):
     """交互式循环模式"""
@@ -347,21 +465,22 @@ def main():
     parser.add_argument("--no-correct", action="store_true", help="Skip transcript correction step")
     parser.add_argument("--download-only", action="store_true", help="Only download video, skip transcription and summarization")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode (keep running after processing)")
+    parser.add_argument("--local-loop", action="store_true", help="Local video loop mode (continuously process local video paths)")
 
     args = parser.parse_args()
 
     has_input = args.url or args.file or args.local
 
-    # 如果指定了 --interactive 或没有提供任何输入，进入交互模式
+    if args.local_loop:
+        local_loop_mode(args.llm, args.mode, args.detail_level, args.bullet_count, args.force)
+        return
+
     if args.interactive or not has_input:
         interactive_mode(args.llm, args.mode, args.detail_level, args.bullet_count, args.force)
         return
 
     # 单次命令模式（兼容原有行为）
-    class SingleArgs:
-        pass
-
-    single_args = SingleArgs()
+    single_args = ProcessArgs()
     single_args.llm = args.llm
     single_args.mode = args.mode
     single_args.detail_level = args.detail_level

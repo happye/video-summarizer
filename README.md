@@ -13,6 +13,7 @@
 - 按视频名称分类的目录结构
 - 支持多种总结模式（大纲、时间线、MapReduce）
 - **交互模式**：处理完不退出，连续处理多个视频
+- **本地视频循环模式**：`--local-loop`，专门循环处理本地视频文件/目录，直接输入路径即可
 - **本地视频目录**：直接处理已下载的视频，跳过下载步骤
 - **AI缓存命中日志**：前台+本地文件双记录，追踪API缓存效率
 - **费曼学习法提示词**：专业术语通俗解释、原话引用、举例说明
@@ -114,12 +115,16 @@ DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 | `--no-correct` | 跳过转录纠错步骤 |
 | `--download-only` | 仅下载视频，跳过转录和总结 |
 | `--interactive` / `-i` | 交互模式 |
+| `--local-loop` | 本地视频循环模式（连续处理本地视频文件/目录） |
 
 #### 示例命令
 
 ```bash
 # 交互模式（无参数自动进入）
 python main.py
+
+# 本地视频循环模式
+python main.py --local-loop --llm kimi --mode outline
 
 # 从URL下载并处理
 python main.py --url "https://www.bilibili.com/video/BV1bpQeY2EvH"
@@ -232,7 +237,7 @@ python test_deepseek.py
 video-summarizer/
 ├── main.py                      # 主入口（交互模式+单次模式）
 ├── config.py                    # 配置文件（API密钥等）
-├── run.ps1                      # 启动脚本（交互/下载/单次三模式）
+├── run.ps1                      # 启动脚本（交互/下载/单次/本地循环四模式）
 ├── CHANGELOG.md                 # 版本记录
 ├── README.md                    # 使用文档
 ├── requirements.txt             # Python依赖
@@ -260,7 +265,7 @@ video-summarizer/
 
 ## 版本信息
 
-当前版本：**v1.4.0** (2026-05-23)
+当前版本：**v1.5.0** (2026-05-26)
 
 查看完整版本记录：[CHANGELOG.md](CHANGELOG.md)
 

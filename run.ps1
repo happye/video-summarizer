@@ -61,9 +61,10 @@ Write-Host "==============================="
 Write-Host "1) Interactive mode (keep running, process multiple videos) [Recommended]"
 Write-Host "2) Download only (continuously download videos without transcription/summarization)"
 Write-Host "3) Single mode (process one video then exit)"
+Write-Host "4) Local video loop (continuously process local video files/directories)"
 Write-Host
 
-$runChoice = Read-Host "Enter your choice (1-3, default: 1)"
+$runChoice = Read-Host "Enter your choice (1-4, default: 1)"
 
 if ($runChoice -eq "2") {
     # Download only mode - continuous loop
@@ -86,6 +87,90 @@ if ($runChoice -eq "2") {
         python main.py --url "$url" --download-only
         Write-Host
     }
+} elseif ($runChoice -eq "4") {
+    # Local video loop mode
+    Write-Host
+    Write-Host "==============================="
+    Write-Host "Local Video Loop Mode"
+    Write-Host "==============================="
+
+    # Select LLM provider
+    Write-Host
+    Write-Host "==============================="
+    Write-Host "Select LLM Provider:"
+    Write-Host "==============================="
+    Write-Host "1) Kimi (Moonshot AI) - Default, supports long context"
+    Write-Host "2) DeepSeek - Requires DEEPSEEK_API_KEY in config.py"
+    Write-Host "3) Ollama - Local model, requires Ollama running"
+    Write-Host
+
+    $llmChoice = Read-Host "Enter your choice (1-3, default: 1)"
+
+    $llmProvider = "kimi"
+    switch ($llmChoice) {
+        "2" { $llmProvider = "deepseek" }
+        "3" { $llmProvider = "ollama" }
+        default { $llmProvider = "kimi" }
+    }
+
+    Write-Host "Using LLM provider: $llmProvider"
+    Write-Host
+
+    # Check API key configuration
+    Write-Host "Checking API key configuration..."
+    try {
+        $configContent = Get-Content -Path "config.py" -Raw
+
+        if ($llmProvider -eq "kimi") {
+            if ($configContent -match 'KIMI_API_KEY\s*=\s*["\x27]\s*["\x27]') {
+                Write-Host "Warning: KIMI_API_KEY is empty. Please edit config.py and enter your Kimi API key."
+                Read-Host "Press any key to continue, or Ctrl+C to exit..."
+            } else {
+                Write-Host "Kimi API key configured."
+            }
+        } elseif ($llmProvider -eq "deepseek") {
+            if ($configContent -match 'DEEPSEEK_API_KEY\s*=\s*["\x27]\s*["\x27]') {
+                Write-Host "Warning: DEEPSEEK_API_KEY is empty. Please edit config.py and enter your DeepSeek API key."
+                Write-Host "Get your API key from: https://platform.deepseek.com/"
+                Read-Host "Press any key to continue, or Ctrl+C to exit..."
+            } else {
+                Write-Host "DeepSeek API key configured."
+            }
+        } elseif ($llmProvider -eq "ollama") {
+            Write-Host "Using Ollama local model. Make sure Ollama is running."
+        }
+
+        Write-Host "API key configuration checked."
+        Write-Host
+    } catch {
+        Write-Host "Error reading configuration file."
+        Read-Host "Press any key to exit..."
+        exit 1
+    }
+
+    # Select summarization mode
+    Write-Host "==============================="
+    Write-Host "Select Summarization Mode:"
+    Write-Host "==============================="
+    Write-Host "1) Outline - Structured hierarchical summary (default)"
+    Write-Host "2) Timeline - Chronological summary"
+    Write-Host "3) MapReduce - Parallel processing summary"
+    Write-Host
+
+    $modeChoice = Read-Host "Enter your choice (1-3, default: 1)"
+
+    $mode = "outline"
+    switch ($modeChoice) {
+        "2" { $mode = "timeline" }
+        "3" { $mode = "mapreduce" }
+        default { $mode = "outline" }
+    }
+
+    Write-Host "Using mode: $mode"
+    Write-Host
+
+    # Launch local video loop mode
+    python main.py --local-loop --llm $llmProvider --mode $mode
 } elseif ($runChoice -eq "3") {
     # Single mode - original behavior
     Write-Host
