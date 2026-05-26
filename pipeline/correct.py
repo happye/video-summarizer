@@ -151,6 +151,7 @@ def correct_transcript(transcript_path, llm_provider="deepseek"):
     corrected_data = dict(data)
     corrected_data["segments"] = corrected_segments
     corrected_data["correction_applied"] = True
+    corrected_data["text"] = corrected_text
 
     with open(corrected_path, "w", encoding="utf-8") as f:
         json.dump(corrected_data, f, ensure_ascii=False, indent=2)
