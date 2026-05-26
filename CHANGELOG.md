@@ -16,6 +16,10 @@
 - **文件自复制导致 WinError 32**：`_process_file` 检测源文件与目标文件相同时跳过复制，直接使用原路径
 - **路径特殊字符解析容错**：引号成对剥离、命令匹配收紧、`os.path.normpath()` 规范化路径
 - **Args 类循环内重复创建**：提取为模块级 `ProcessArgs` 类，消除循环内重复定义
+- **chunk_transcript() 多余参数报错**：移除调用时误传的 `llm_provider` 参数
+- **中文纠错 segments 映射失败**：用 `difflib.SequenceMatcher` 字符级对齐替换 `split()` 分词映射，彻底修复中文场景下纠错结果无法写回 segments 的问题
+- **纠错文本丢失**：`transcript_loader` 优先读取 JSON `text` 字段（纠错后的完整文本），不再仅从 segments 拼接
+- **download_video 返回值解包报错**：`_process_url` 接收 3 个返回值并传入 `video_ext`，修复 `too many values to unpack`
 
 ---
 
