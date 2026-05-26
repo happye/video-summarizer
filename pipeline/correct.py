@@ -274,29 +274,67 @@ def _save_diff(original, corrected, diff_path):
 
 
 def _apply_corrections(segments, original_text, corrected_text):
-    orig_parts = original_text.split()
-    corr_parts = corrected_text.split()
+    import difflib
 
-    if len(orig_parts) == len(corr_parts):
-        word_map = dict(zip(orig_parts, corr_parts))
-        corrected_segments = []
-        for seg in segments:
-            new_seg = dict(seg)
-            orig_seg_text = seg.get("text", "")
-            words = orig_seg_text.split()
-            corrected_words = [word_map.get(w, w) for w in words]
-            new_seg["text"] = " ".join(corrected_words)
-            corrected_segments.append(new_seg)
-        print(f"[CORRECT]   Segments映射: 成功 (词数匹配: {len(orig_parts)})")
-        return corrected_segments
+    seg_ranges = []
+    search_pos = 0
+    for seg in segments:
+        seg_text = seg.get("text", "")
+        if not seg_text:
+            seg_ranges.append((search_pos, search_pos))
+            continue
+        start = original_text.find(seg_text, search_pos)
+        if start == -1:
+            start = search_pos
+        end = start + len(seg_text)
+        seg_ranges.append((start, end))
+        search_pos = end
+        if search_pos < len(original_text) and original_text[search_pos] == ' ':
+            search_pos += 1
+
+    sm = difflib.SequenceMatcher(None, original_text, corrected_text, autojunk=False)
+    opcodes = sm.get_opcodes()
 
     corrected_segments = []
-    for seg in segments:
+    mapped_count = 0
+    for i, seg in enumerate(segments):
+        orig_start, orig_end = seg_ranges[i]
         new_seg = dict(seg)
-        new_seg["text"] = seg.get("text", "")
+
+        if orig_start >= orig_end:
+            new_seg["text"] = seg.get("text", "")
+            corrected_segments.append(new_seg)
+            continue
+
+        corr_chars = []
+        for tag, i1, i2, j1, j2 in opcodes:
+            if i2 <= orig_start or i1 >= orig_end:
+                continue
+            if tag == 'equal':
+                overlap_start = max(i1, orig_start)
+                overlap_end = min(i2, orig_end)
+                offset = overlap_start - i1
+                length = overlap_end - overlap_start
+                corr_chars.append(corrected_text[j1 + offset:j1 + offset + length])
+            elif tag == 'replace':
+                overlap_start = max(i1, orig_start)
+                overlap_end = min(i2, orig_end)
+                if overlap_start < overlap_end:
+                    corr_chars.append(corrected_text[j1:j2])
+            elif tag == 'insert':
+                if orig_start <= i1 <= orig_end:
+                    corr_chars.append(corrected_text[j1:j2])
+            elif tag == 'delete':
+                pass
+
+        if corr_chars:
+            new_text = ''.join(corr_chars).strip()
+            if new_text:
+                new_seg["text"] = new_text
+                if new_text != seg.get("text", ""):
+                    mapped_count += 1
+
         corrected_segments.append(new_seg)
 
-    print(f"[CORRECT]   ⚠ Segments映射失败: 词数不匹配 (原始={len(orig_parts)}, 纠错={len(corr_parts)})")
-    print(f"[CORRECT]   ⚠ 原因: LLM纠错时增删了词, 无法逐词映射回segments")
-    print(f"[CORRECT]   ⚠ 结果: segments文本未更新, 但完整纠错文本已保存在corrected文件中")
+    print(f"[CORRECT]   Segments映射: 字符级对齐完成 (修改: {mapped_count}/{len(segments)} 段)")
     return corrected_segments
