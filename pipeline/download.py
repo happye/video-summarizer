@@ -86,6 +86,7 @@ def download_video(url):
     
     # Add output format and URL
     # Use --no-restrict-filenames to preserve Unicode characters (Chinese, etc.)
+    # Use --merge-output-format mp4 to ensure output is always mp4
     temp_output = f"temp/%(title)s.%(ext)s"
     args.extend(["-o", temp_output, "--no-playlist", "--no-restrict-filenames",
                  "--merge-output-format", "mp4", url])
