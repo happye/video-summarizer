@@ -8,8 +8,8 @@
 | `OLLAMA_MODEL` | str | `"qwen2.5"` | Ollama 模型名称 |
 | `KIMI_API_KEY` | str | `""` | Kimi (Moonshot AI) API 密钥 |
 | `DEEPSEEK_API_KEY` | str | `""` | DeepSeek API 密钥 |
-| `CHUNK_SIZE` | int | `1200` | 文本分段大小（字符数） |
-| `CHUNK_OVERLAP` | int | `200` | 分段重叠字符数 |
+| `CHUNK_SIZE` | int | `8000` | 文本分段大小（字符数），充分利用 DeepSeek/Kimi 超长上下文 |
+| `CHUNK_OVERLAP` | int | `800` | 分段重叠字符数 |
 | `SUMMARY_STYLE` | str | `"outline"` | 默认摘要模式 |
 | `SUMMARY_DETAIL_LEVEL` | int | `2` | 摘要详细程度（1-5） |
 | `SUMMARY_BULLET_COUNT` | int | `10` | 要点数量 |

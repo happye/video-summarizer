@@ -1,5 +1,35 @@
 # 版本记录
 
+## v1.6.0 (2026-07-01)
+
+### 重磅更新
+
+- **转录模型升级**：Whisper → Qwen3-ASR-1.7B（阿里开源，Apache 2.0，中文 CER ~3.76%）
+  - 中文识别精度大幅提升，达开源免费模型 Top 级别
+  - 原生支持长音频（内部按 1200 秒自动分块，无需手动 VAD）
+  - **自带标点符号输出**，解决了转录文本无标点导致分句困难的问题
+  - 通过 `qwen-asr` PyPI 包加载，Windows 兼容
+  - 移除 whisperx / pyannote-audio / ctranslate2 / pyav 等旧依赖
+- **超长上下文优化**：充分利用 DeepSeek(378K) / Kimi(194K) 上下文窗口
+  - CHUNK_SIZE 1200 → 8000，CHUNK_OVERLAP 200 → 800
+  - `map_reduce.py` 新增单次全量模式：token 估算 ≤ 80% 上下文阈值时，单次 LLM 调用处理全部转录文本
+  - 超出阈值才降级为传统 map-reduce
+
+### Bug 修复
+
+- **ffmpeg 管道阻塞**：`capture_output=True` 导致 ffmpeg stderr 进度输出填满管道缓冲区在 Windows 死锁，改为 `stdout=DEVNULL, stderr=PIPE`
+- **Qwen3-ASR 模型加载到 CPU**：`Qwen3ASRModel.from_pretrained` 不会自动放到 GPU，加载后手动 `_model.model.to("cuda")`，否则推理慢 100 倍
+- **语言参数错误**：`language="zh"` 不被 qwen-asr 接受，改为 `language="Chinese"`（全称）
+- **librosa 加载超慢**：36 分钟音频 librosa.load 要几十秒，改用 `soundfile.read`（0.1 秒）
+- **max_new_tokens 不足**：默认 512 对长音频不够（20 分钟中文约需 6000 tokens），设为 8192
+
+### 性能数据
+
+- 36 分钟中文视频：转录约 5 分钟（11752 字符），总结 49.81 秒（DeepSeek 单次全量，5445 字符摘要）
+- GPU 利用率 93%（RTX 4080 SUPER，fp16，显存占用 15.6GB）
+
+---
+
 ## v1.5.0 (2026-05-26)
 
 ### 新增功能

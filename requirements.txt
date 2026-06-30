@@ -5,23 +5,18 @@ torch
 torchvision
 torchaudio
 
-# 视频处理
-transformers
-whisperx
-pyannote-audio
-pyannote-database
-pyannote-metrics
-pyannote-pipeline
+# 语音识别（Qwen3-ASR）
+qwen-asr
+transformers>=4.57,<5.0
+soundfile
+modelscope
 
 # 文本处理
 langchain
+langchain-text-splitters
 nltk
 
 # 工具
 tqdm
 httpx
 fsspec
-
-# 其他
-ctranslate2
-pyav

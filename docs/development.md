@@ -79,3 +79,16 @@ video-summarizer/
 | 中文路径解析错误 | 未处理引号/特殊字符 | 成对引号剥离、`os.path.normpath()` |
 | 纠错 segments 映射失败 | `split()` 对中文无效 | 用 `difflib` 字符级对齐 |
 | `too many values to unpack` | 函数返回值与接收变量数不匹配 | 检查函数签名的返回值数量 |
+| ffmpeg 死锁 | `capture_output=True` 的 stderr 管道被填满 | `stdout=DEVNULL, stderr=PIPE` |
+| Qwen3-ASR 推理极慢 | 模型加载到 CPU | 加载后手动 `_model.model.to("cuda")` |
+| `language="zh"` 报错 | qwen-asr 要求语言全称 | 改为 `language="Chinese"` |
+| librosa 加载超慢 | 默认走重采样路径 | 改用 `soundfile.read`（已是 16kHz 无需重采样） |
+| 生成内容被截断 | 默认 `max_new_tokens=512` | 设为 8192 |
+
+## 转录模型开发注意事项
+
+- **模型路径**：ModelScope 在 Windows 下载时 `.` 会被替换为 `___`，所以 `Qwen3-ASR-1.7B` 实际目录是 `Qwen3-ASR-1___7B`
+- **GPU 迁移**：`Qwen3ASRModel.from_pretrained(path, dtype=...)` 不会自动放到 GPU，必须加载后手动 `.to("cuda")`
+- **长音频分块**：qwen-asr 内部按 `MAX_ASR_INPUT_SECONDS=1200`（20 分钟）自动分块，无需手动 VAD
+- **标点符号**：Qwen3-ASR 自带标点输出，无需额外的标点恢复模型
+- **音频输入**：传 `(numpy_array, sample_rate)` 元组，避免 qwen-asr 内部 subprocess 加载文件（Windows 兼容性更好）

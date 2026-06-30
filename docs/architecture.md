@@ -9,13 +9,13 @@
   ↓
 download（仅 URL 模式）
   ↓
-transcribe（WhisperX GPU 转录）
+transcribe（Qwen3-ASR GPU 转录，自带标点）
   ↓
 correct（AI 纠错，可选）
   ↓
-chunk（文本分段）
+chunk（文本分段，超长上下文优化）
   ↓
-summarize（LLM 生成摘要）
+summarize（LLM 生成摘要，单次全量优先）
   ↓
 output（写入 Markdown）
 ```

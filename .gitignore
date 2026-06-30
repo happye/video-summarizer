@@ -41,3 +41,6 @@ logs/
 
 # Output directory (contains large video files)
 output/
+
+# Model files (Qwen3-ASR etc.)
+models/

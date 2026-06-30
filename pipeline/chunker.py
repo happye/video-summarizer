@@ -16,10 +16,10 @@ def chunk_transcript(transcript_path):
     print(f"Transcript length: {transcript_length} characters")
     
     # Dynamic chunk size adjustment based on transcript length
-    # For long transcripts (> 50,000 characters), use larger chunks
+    # 长文本也用大 chunk，配合 DeepSeek/Kimi 超长上下文
     if transcript_length > 50000:
-        dynamic_chunk_size = 3000
-        dynamic_chunk_overlap = 400
+        dynamic_chunk_size = 15000
+        dynamic_chunk_overlap = 1000
         print(f"Long transcript detected, using larger chunks: {dynamic_chunk_size} with overlap {dynamic_chunk_overlap}")
     else:
         dynamic_chunk_size = CHUNK_SIZE
