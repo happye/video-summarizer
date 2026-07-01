@@ -66,3 +66,16 @@
 ## 支持的视频格式
 
 `.mp4` `.mkv` `.webm` `.avi` `.mov` `.flv` `.wmv` `.ts` `.mp3` `.wav` `.m4a` `.flac`
+
+## 转录模型配置
+
+| 项 | 值 |
+|----|-----|
+| 模型 | Qwen3-ASR-1.7B（阿里开源，Apache 2.0） |
+| 中文 CER | ~3.76%（开源 Top 级别） |
+| 加载方式 | `qwen-asr` PyPI 包 |
+| 语言参数 | `"Chinese"`（全称，非 ISO code） |
+| `max_new_tokens` | 8192（默认 512 对长音频不够） |
+| 模型存放路径 | `models/models/Qwen/Qwen3-ASR-1___7B`（ModelScope 下载，Windows 路径转换） |
+| GPU 要求 | 建议 ≥8GB 显存（fp16），36 分钟视频约占用 15.6GB |
+| 性能参考 | 36 分钟视频 → 转录约 5 分钟，11752 字符 |

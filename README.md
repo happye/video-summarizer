@@ -25,7 +25,7 @@ python main.py
 ## 功能一览
 
 - 自动视频下载（YouTube、Bilibili 等）
-- GPU 加速语音识别（WhisperX）
+- GPU 加速语音识别（Qwen3-ASR，中文专精，自带标点）
 - AI 转录纠错（同音字、术语误识别）
 - 三种摘要模式：大纲 / 时间线 / MapReduce
 - 三种 LLM 提供商：Kimi / DeepSeek / Ollama
@@ -48,7 +48,7 @@ python main.py --file "video.mp4" --download-only       # 仅下载
 |------|---------|---------|
 | **Outline** | `I. → A. → 1.` 层次编号 | 知识讲座、投资分析（推荐） |
 | **Timeline** | `MM:SS 事件描述` | 直播回放、会议记录 |
-| **MapReduce** | 要点式综合摘要 | 超长视频 + Ollama |
+| **MapReduce** | 要点式综合摘要 | 超长视频；DeepSeek/Kimi 单次全量优先 |
 
 ## 文档
 
@@ -62,4 +62,4 @@ python main.py --file "video.mp4" --download-only       # 仅下载
 
 ## 版本
 
-当前版本：**v1.5.0** (2026-05-26)
+当前版本：**v1.6.0** (2026-07-01)

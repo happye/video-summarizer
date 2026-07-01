@@ -15,8 +15,8 @@
 ## 前置依赖
 
 - Python 3.10+
-- CUDA 兼容 GPU（推荐，加速语音识别）
-- ffmpeg（WhisperX 依赖）
+- CUDA 兼容 GPU（推荐，加速语音识别，建议 ≥8GB 显存）
+- ffmpeg（音频提取）
 - Ollama（仅使用本地模型时需要）
 
 ## 故障排查
@@ -25,7 +25,10 @@
 |------|------|---------|
 | `FileNotFoundError` | 文件路径错误 | 检查路径，中文路径需加引号 |
 | `APIError` | API 密钥或网络问题 | 检查 config.py 密钥、网络连接 |
-| `CUDA out of memory` | GPU 显存不足 | 使用更小的 Whisper 模型 |
+| `CUDA out of memory` | GPU 显存不足 | Qwen3-ASR fp16 需 ~16GB，可改 CPU 模式（慢） |
+| ASR 推理极慢 | 模型加载到 CPU | 检查日志 `device: cuda`，确认 `_model.model.to("cuda")` |
+| `language "zh" not supported` | 语言参数错误 | qwen-asr 要求全称 `Chinese`，不是 ISO code |
+| ffmpeg 死锁 | `capture_output=True` 管道阻塞 | 已修复，用 `stdout=DEVNULL, stderr=PIPE` |
 | `ProxyError` | 代理/上下文过大 | 减少上下文大小或检查代理 |
 | Bilibili "deleted or geo-restricted" | BV 号大小写或地区限制 | 直接粘贴 URL，不要手动改 BV 号 |
 | `[WinError 32]` | 文件被占用 | 关闭占用进程，或用 `--force` |

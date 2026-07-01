@@ -101,3 +101,27 @@ output/<视频名称>/
 3. 用 `difflib.SequenceMatcher` 字符级对齐，将纠错结果映射回各 segment
 4. 纠错文本同时写入 JSON 的 `text` 字段（确保下游即使映射失败也能读到纠错文本）
 5. `transcript_loader` 优先读 `text` 字段，fallback 从 segments 拼接
+
+## 转录模型（Qwen3-ASR-1.7B）
+
+- **模型选择**：阿里 Qwen3-ASR-1.7B，Apache 2.0 开源，中文 CER ~3.76%
+- **核心优势**：
+  - 原生支持长音频（内部按 1200 秒自动分块，无需手动 VAD）
+  - 自带标点符号输出（解决了无标点转录文本的分句问题）
+  - 通过 `qwen-asr` PyPI 包加载，Windows 兼容
+- **加载注意事项**：
+  - `Qwen3ASRModel.from_pretrained` 不会自动将模型放到 GPU，必须加载后手动 `_model.model.to("cuda")`
+  - 语言参数使用全称 `"Chinese"`，不是 ISO code `"zh"`
+  - 音频加载用 `soundfile`（0.1 秒），不要用 `librosa.load`（36 分钟音频要几十秒）
+  - `max_new_tokens` 默认 512 对长音频不够，设为 8192
+
+## 分段与超长上下文优化
+
+- **CHUNK_SIZE = 8000, CHUNK_OVERLAP = 800**（config.py）
+- **单次全量优先**（map_reduce.py）：
+  - DeepSeek v4 pro：378K 上下文，80% 阈值 = 302K
+  - Kimi 2.6：194K 上下文，80% 阈值 = 155K
+  - Ollama：122K 上下文，80% 阈值 = 97K
+  - 转录文本 token 估算 ≤ 阈值时，单次 LLM 调用处理全部文本
+  - 超出阈值才降级为 map-reduce（分块摘要 → 合并）
+- **长转录分块兜底**（chunker.py）：>50000 字符时自动放大到 15000/1000
