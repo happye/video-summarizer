@@ -23,6 +23,8 @@ _ASR_MAX_NEW_TOKENS = 4096
 # qwen-asr 默认 1200s/chunk 对 16GB 显存太大（cross-attention KV Cache 爆显存），
 # 300s/chunk 在 16GB 显存上峰值约 8-10GB，留足够余量。
 _CHUNK_SECONDS = 300
+# chunk 间重叠时长（秒）。重叠确保句子不被截断，转录后通过文本去重消除重复。
+_OVERLAP_SECONDS = 30
 
 # 全局模型实例（懒加载，避免交互模式启动慢）
 _model = None
@@ -94,6 +96,37 @@ def _transcribe_chunk(model, audio_chunk, sr):
     return ""
 
 
+def _deduplicate_overlap(prev_text, curr_text, min_overlap_chars=6):
+    """去除重叠区域的重复文本。
+
+    前一个 chunk 的尾部与当前 chunk 的头部包含相同音频的转录，
+    通过在 prev 尾部搜索 curr 头部的子串找到重叠点，只保留新增部分。
+    """
+    if not prev_text or not curr_text:
+        return curr_text
+
+    # 搜索范围：prev 最后 200 字 vs curr 前 200 字
+    search_range = min(200, len(prev_text), len(curr_text))
+    prev_tail = prev_text[-search_range:]
+
+    # 从长到短搜索 prev_tail 中的子串是否出现在 curr 头部
+    best_cut = 0
+    for length in range(min(search_range, 150), min_overlap_chars - 1, -1):
+        # 在 prev_tail 中取长度为 length 的子串
+        for start in range(len(prev_tail) - length + 1):
+            candidate = prev_tail[start:start + length]
+            pos = curr_text.find(candidate)
+            if pos != -1 and pos <= 100:  # 重叠必须在 curr 头部附近
+                best_cut = pos + length
+                break
+        if best_cut > 0:
+            break
+
+    if best_cut > 0:
+        return curr_text[best_cut:]
+    return curr_text
+
+
 def transcribe_video(video_path):
     """使用 Qwen3-ASR 转录视频，输出兼容 {text, segments} 格式"""
     print(f"Transcribing video {video_path}...")
@@ -125,27 +158,37 @@ def transcribe_video(video_path):
         print(f"Audio loaded: {total_seconds:.1f}s, {sr}Hz")
 
         # 手动按 _CHUNK_SECONDS 分 chunk 转录，避免长音频 cross-attention KV Cache 爆显存
+        # chunk 间有 _OVERLAP_SECONDS 重叠，转录后通过文本去重消除重复
         chunk_samples = _CHUNK_SECONDS * sr
-        num_chunks = math.ceil(len(audio_array) / chunk_samples)
+        overlap_samples = _OVERLAP_SECONDS * sr
+        step_samples = chunk_samples - overlap_samples  # 实际步进
+        num_chunks = max(1, math.ceil((len(audio_array) - overlap_samples) / step_samples))
         all_text_parts = []
 
-        if num_chunks <= 1:
-            # 短音频直接转录
+        if num_chunks <= 1 or len(audio_array) <= chunk_samples:
+            # 短音频直接转录（无需重叠）
             print("Transcribing with Qwen3-ASR (single chunk)...")
             text = _transcribe_chunk(model, audio_array, sr)
             all_text_parts.append(text)
         else:
-            # 长音频分 chunk 转录
-            print(f"Transcribing with Qwen3-ASR ({num_chunks} chunks × {_CHUNK_SECONDS}s)...")
+            # 长音频分 chunk 转录（带重叠 + 去重）
+            print(f"Transcribing with Qwen3-ASR ({num_chunks} chunks × {_CHUNK_SECONDS}s, overlap {_OVERLAP_SECONDS}s)...")
+            prev_text = ""
             for i in range(num_chunks):
-                start = i * chunk_samples
+                start = i * step_samples
                 end = min(start + chunk_samples, len(audio_array))
                 chunk_audio = audio_array[start:end]
                 chunk_dur = len(chunk_audio) / sr
 
                 print(f"  Chunk {i+1}/{num_chunks} ({chunk_dur:.1f}s)...")
                 text = _transcribe_chunk(model, chunk_audio, sr)
+
+                # 去除与上一个 chunk 重叠部分的重复文本
+                if prev_text:
+                    text = _deduplicate_overlap(prev_text, text)
+
                 all_text_parts.append(text)
+                prev_text = text
 
                 # 释放上一轮 KV Cache 显存
                 if device == "cuda":
