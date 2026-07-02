@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import torch
 import subprocess
 import tempfile
@@ -16,8 +17,12 @@ _MODEL_CANDIDATES = [
 ]
 # 中文转录语言标识（qwen-asr 要求全称，非 ISO code）
 _ASR_LANGUAGE = "Chinese"
-# 单次推理最大生成 token 数：20 分钟中文约需 6000 tokens，8192 留余量
-_ASR_MAX_NEW_TOKENS = 8192
+# 单 chunk 转录最大生成 token 数
+_ASR_MAX_NEW_TOKENS = 4096
+# 手动分 chunk 的音频长度（秒）。
+# qwen-asr 默认 1200s/chunk 对 16GB 显存太大（cross-attention KV Cache 爆显存），
+# 300s/chunk 在 16GB 显存上峰值约 8-10GB，留足够余量。
+_CHUNK_SECONDS = 300
 
 # 全局模型实例（懒加载，避免交互模式启动慢）
 _model = None
@@ -48,11 +53,12 @@ def _get_model():
         _model = Qwen3ASRModel.from_pretrained(
             model_path,
             dtype=dtype,
-            max_new_tokens=_ASR_MAX_NEW_TOKENS,
         )
+        # 设置 max_new_tokens（from_pretrained 不一定透传此参数）
+        _model.max_new_tokens = _ASR_MAX_NEW_TOKENS
         if device == "cuda":
             _model.model = _model.model.to("cuda")
-        print(f"[ASR] Model loaded on {device} ({dtype})")
+        print(f"[ASR] Model loaded on {device} ({dtype}), max_new_tokens={_ASR_MAX_NEW_TOKENS}")
     return _model
 
 
@@ -70,6 +76,22 @@ def _extract_audio(video_path, output_wav):
     if result.returncode != 0:
         err = result.stderr.decode("utf-8", errors="ignore")[:500]
         raise RuntimeError(f"ffmpeg failed: {err}")
+
+
+def _transcribe_chunk(model, audio_chunk, sr):
+    """转录单个音频 chunk，返回文本"""
+    results = model.transcribe(
+        (audio_chunk, sr),
+        language=_ASR_LANGUAGE,
+        return_time_stamps=False,
+    )
+    transcription = results[0] if results else None
+    if transcription:
+        if hasattr(transcription, "text"):
+            return transcription.text or ""
+        elif isinstance(transcription, dict):
+            return transcription.get("text", "")
+    return ""
 
 
 def transcribe_video(video_path):
@@ -99,35 +121,41 @@ def transcribe_video(video_path):
         audio_array, sr = sf.read(temp_wav.name, dtype="float32", always_2d=False)
         if audio_array.ndim > 1:
             audio_array = audio_array.mean(axis=-1).astype(np.float32)
-        print(f"Audio loaded: {len(audio_array)/sr:.1f}s, {sr}Hz")
+        total_seconds = len(audio_array) / sr
+        print(f"Audio loaded: {total_seconds:.1f}s, {sr}Hz")
 
-        # Qwen3-ASR 原生支持长音频（内部按 MAX_ASR_INPUT_SECONDS=1200s 自动分块），
-        # 传 (numpy_array, sample_rate) 元组，避免 qwen-asr 内部 subprocess 加载文件
-        print("Transcribing with Qwen3-ASR (supports long audio)...")
-        results = model.transcribe(
-            (audio_array, sr),
-            language=_ASR_LANGUAGE,
-            return_time_stamps=False,
-        )
+        # 手动按 _CHUNK_SECONDS 分 chunk 转录，避免长音频 cross-attention KV Cache 爆显存
+        chunk_samples = _CHUNK_SECONDS * sr
+        num_chunks = math.ceil(len(audio_array) / chunk_samples)
+        all_text_parts = []
 
-        # results 是 List[ASRTranscription]，取第一个
-        transcription = results[0] if results else None
+        if num_chunks <= 1:
+            # 短音频直接转录
+            print("Transcribing with Qwen3-ASR (single chunk)...")
+            text = _transcribe_chunk(model, audio_array, sr)
+            all_text_parts.append(text)
+        else:
+            # 长音频分 chunk 转录
+            print(f"Transcribing with Qwen3-ASR ({num_chunks} chunks × {_CHUNK_SECONDS}s)...")
+            for i in range(num_chunks):
+                start = i * chunk_samples
+                end = min(start + chunk_samples, len(audio_array))
+                chunk_audio = audio_array[start:end]
+                chunk_dur = len(chunk_audio) / sr
 
-        segments = []
-        full_text = ""
+                print(f"  Chunk {i+1}/{num_chunks} ({chunk_dur:.1f}s)...")
+                text = _transcribe_chunk(model, chunk_audio, sr)
+                all_text_parts.append(text)
 
-        if transcription:
-            # 获取文本（transcription 是 ASRTranscription dataclass）
-            if hasattr(transcription, "text"):
-                full_text = transcription.text or ""
-            elif isinstance(transcription, dict):
-                full_text = transcription.get("text", "")
+                # 释放上一轮 KV Cache 显存
+                if device == "cuda":
+                    torch.cuda.empty_cache()
+
+        full_text = "".join(all_text_parts)
 
         # Qwen3-ASR 在 return_time_stamps=False 时不返回时间戳，
         # 用整段文本作为单个 segment 保持输出格式兼容
-        if not segments and full_text:
-            segments = [{"start": 0, "end": 0, "text": full_text}]
-
+        segments = [{"start": 0, "end": 0, "text": full_text}] if full_text else []
         result = {"text": full_text, "segments": segments}
 
         # 保存
