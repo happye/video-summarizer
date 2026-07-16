@@ -18,7 +18,10 @@ _MODEL_CANDIDATES = [
 # 中文转录语言标识（qwen-asr 要求全称，非 ISO code）
 _ASR_LANGUAGE = "Chinese"
 # 单 chunk 转录最大生成 token 数
-_ASR_MAX_NEW_TOKENS = 4096
+# Qwen3-ASR 默认 512，官方推荐长音频设 200000。
+# 4096 对密集语速的 300s chunk 可能截断（截尾不截头，但仍丢数据）。
+# 65536 对 300s chunk 绰绰有余，KV Cache 随实际生成量增长，不会预分配。
+_ASR_MAX_NEW_TOKENS = 65536
 # 手动分 chunk 的音频长度（秒）。
 # qwen-asr 默认 1200s/chunk 对 16GB 显存太大（cross-attention KV Cache 爆显存），
 # 300s/chunk 在 16GB 显存上峰值约 8-10GB，留足够余量。
@@ -96,6 +99,41 @@ def _transcribe_chunk(model, audio_chunk, sr):
     return ""
 
 
+# 递归细分的最小粒度(秒)。低于此长度不再切分,避免片段过短影响 ASR 质量。
+_ASR_MIN_SUBSEC = 15
+
+
+def _transcribe_with_fallback(model, audio, sr, depth=0):
+    """递归细分转录:返回空则对半切分重试,直到找到有文本的片段或达到最小粒度。
+
+    Qwen3-ASR 遇到以音乐/片头开头的音频,可能对整段返回空文本(language None)。
+    对半切分后,纯音乐片段返回空(继续细分),说话片段返回文本(停止细分),
+    最终拼接所有有文本的片段,确保无论音乐持续多久都不丢失说话内容。
+
+    示例(300s chunk,开头 90s 音乐):
+      300s 空 → 150s+150s
+      150s(0-150s,含音乐)空 → 75s+75s
+      75s(0-75s,纯音乐)空 → 37.5s+37.5s(都≤15s阈值附近,停止)
+      75s(75-150s,音乐尾+说话)有文本 → 保留
+      150s(150-300s,纯说话)有文本 → 保留
+    """
+    dur = len(audio) / sr
+    text = _transcribe_chunk(model, audio, sr)
+
+    if text:
+        return text
+    if dur <= _ASR_MIN_SUBSEC:
+        return ""  # 达到最小粒度仍为空,判定为纯非语音,丢弃
+
+    # 返回空且片段够大,对半切分递归
+    indent = "  " * (depth + 1)
+    print(f"{indent}├─ Empty ({dur:.0f}s), split → {dur/2:.0f}s + {dur/2:.0f}s")
+    mid = len(audio) // 2
+    left = _transcribe_with_fallback(model, audio[:mid], sr, depth + 1)
+    right = _transcribe_with_fallback(model, audio[mid:], sr, depth + 1)
+    return left + right
+
+
 def _deduplicate_overlap(prev_text, curr_text, min_overlap_chars=6):
     """去除重叠区域的重复文本。
 
@@ -168,7 +206,7 @@ def transcribe_video(video_path):
         if num_chunks <= 1 or len(audio_array) <= chunk_samples:
             # 短音频直接转录（无需重叠）
             print("Transcribing with Qwen3-ASR (single chunk)...")
-            text = _transcribe_chunk(model, audio_array, sr)
+            text = _transcribe_with_fallback(model, audio_array, sr)
             all_text_parts.append(text)
         else:
             # 长音频分 chunk 转录（带重叠 + 去重）
@@ -181,14 +219,25 @@ def transcribe_video(video_path):
                 chunk_dur = len(chunk_audio) / sr
 
                 print(f"  Chunk {i+1}/{num_chunks} ({chunk_dur:.1f}s)...")
-                text = _transcribe_chunk(model, chunk_audio, sr)
+
+                # 所有 chunk 统一用递归细分转录:
+                # 正常 chunk(说话开头)一次返回文本,零额外开销;
+                # 音乐开头/中间音乐间奏导致空返回时,自动对半切分递归,
+                # 保留音乐后的说话内容,无论音乐出现在哪个位置。
+                raw_text = _transcribe_with_fallback(model, chunk_audio, sr)
+                print(f"    raw: {len(raw_text)} chars")
+
+                if not raw_text:
+                    print(f"    ⚠ Chunk {i+1} returned empty text!")
 
                 # 去除与上一个 chunk 重叠部分的重复文本
                 if prev_text:
-                    text = _deduplicate_overlap(prev_text, text)
+                    text = _deduplicate_overlap(prev_text, raw_text)
+                else:
+                    text = raw_text
 
                 all_text_parts.append(text)
-                prev_text = text
+                prev_text = raw_text  # 用原始文本（非去重后）作为下一轮重叠比对基准
 
                 # 释放上一轮 KV Cache 显存
                 if device == "cuda":
